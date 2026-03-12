@@ -19,7 +19,7 @@ from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
-from mjlab.terrains import TerrainImporterCfg
+from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer.viewer_config import ViewerConfig
 
@@ -78,7 +78,7 @@ def _scene_cfg(play: bool) -> SceneCfg:
     return SceneCfg(
         num_envs=1 if play else 4096,
         env_spacing=2.5,
-        terrain=TerrainImporterCfg(terrain_type="plane"),
+        terrain=TerrainEntityCfg(terrain_type="plane"),
         entities={"robot": robot_cfg},
         sensors=(feet_contact_forces, base_contact_forces),
         extent=2.0,

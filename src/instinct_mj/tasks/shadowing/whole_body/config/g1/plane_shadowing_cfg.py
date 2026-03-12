@@ -23,7 +23,7 @@ from mjlab.managers import (
 )
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.terrains import TerrainImporterCfg
+from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 from mjlab.viewer.viewer_config import ViewerConfig
@@ -762,7 +762,7 @@ def g1_plane_shadowing_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     scene = SceneCfg(
         num_envs=1 if play else 2048,
         env_spacing=2.5 if play else 4.0,
-        terrain=TerrainImporterCfg(terrain_type="plane"),
+        terrain=TerrainEntityCfg(terrain_type="plane"),
         entities=entities,
         sensors=(
             ContactSensorCfg(

@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from mjlab.terrains import TerrainImporterCfg as TerrainImporterCfgBase
+from mjlab.terrains import TerrainEntityCfg as TerrainEntityCfgBase
 
 from .terrain_importer import TerrainImporter
 from .virtual_obstacle import VirtualObstacleCfg
 
 
 @dataclass(kw_only=True)
-class TerrainImporterCfg(TerrainImporterCfgBase):
+class TerrainImporterCfg(TerrainEntityCfgBase):
     class_type: type = TerrainImporter
     """The inherited class to use for the terrain importer."""
 

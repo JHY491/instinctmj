@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 import torch
 from mjlab.entity import Entity as Articulation
 from mjlab.managers import SceneEntityCfg
-from mjlab.terrains import TerrainImporter
+from mjlab.terrains import TerrainEntity
 
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRLEnv
@@ -33,14 +33,14 @@ def terrain_levels_vel(
 
     .. note::
         It is only possible to use this term with the terrain type ``generator``. For further information
-        on different terrain types, check the :class:`mjlab.terrains.TerrainImporter` class.
+        on different terrain types, check the :class:`mjlab.terrains.TerrainEntity` class.
 
     Returns:
         The mean terrain level for the given environment ids.
     """
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
-    terrain: TerrainImporter = env.scene.terrain
+    terrain: TerrainEntity = env.scene.terrain
     command = env.command_manager.get_command("base_velocity")
     # compute the distance the robot walked
     distance = torch.norm(asset.data.root_link_pos_w[env_ids, :2] - env.scene.env_origins[env_ids, :2], dim=1)

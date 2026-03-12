@@ -17,7 +17,7 @@ from mjlab.managers import (
 )
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.terrains import TerrainImporterCfg
+from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import CollisionCfg
 from mjlab.viewer.viewer_config import ViewerConfig
@@ -528,7 +528,7 @@ def g1_beyondmimic_plane_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     scene = beyondmimic_cfg.BeyondMimicSceneCfg(
         num_envs=1 if play else 4096,
         env_spacing=2.5 if play else 4.0,
-        terrain=TerrainImporterCfg(terrain_type="plane"),
+        terrain=TerrainEntityCfg(terrain_type="plane"),
         entities=entities,
         sensors=(
             ContactSensorCfg(

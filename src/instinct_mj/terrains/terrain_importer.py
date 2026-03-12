@@ -11,8 +11,8 @@ import numpy as np
 import torch
 import trimesh
 from mjlab.terrains import SubTerrainCfg as SubTerrainBaseCfg
+from mjlab.terrains import TerrainEntity as TerrainEntityBase
 from mjlab.terrains import TerrainGenerator
-from mjlab.terrains import TerrainImporter as TerrainImporterBase
 
 from .height_field.utils import convert_height_field_to_mesh
 
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .virtual_obstacle import VirtualObstacleBase
 
 
-class TerrainImporter(TerrainImporterBase):
+class TerrainImporter(TerrainEntityBase):
     def __init__(self, cfg: TerrainImporterCfg, device: str):
         runtime_terrain_type = cfg.terrain_type
         if runtime_terrain_type == "hacked_generator":
@@ -105,7 +105,7 @@ class TerrainImporter(TerrainImporterBase):
             }
             self._flat_patch_radii = dict(self.terrain_generator.flat_patch_radii)
         elif self.cfg.terrain_type == "plane":
-            self.import_ground_plane("terrain")
+            self._import_ground_plane("terrain")
             if self.env_origins is None:
                 self.configure_env_origins()
         else:

@@ -10,7 +10,7 @@ from mjlab.managers import SceneEntityCfg
 from mjlab.managers import TerminationTermCfg as DoneTermCfg
 from mjlab.scene import SceneCfg as InteractiveSceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, SensorCfg
-from mjlab.terrains import TerrainImporterCfg
+from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
@@ -98,13 +98,7 @@ class BeyondMimicSceneCfg(InteractiveSceneCfg):
 
     # terrain
     terrain: object = field(
-        default_factory=lambda: TerrainImporterCfg(
-            prim_path="/World/ground",
-            terrain_type="plane",
-            terrain_generator=None,
-            physics_material=None,
-            visual_material=None,
-        )
+        default_factory=lambda: TerrainEntityCfg(terrain_type="plane")
     )
 
     sensors: tuple[SensorCfg, ...] = field(
