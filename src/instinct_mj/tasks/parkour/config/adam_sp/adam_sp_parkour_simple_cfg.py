@@ -8,6 +8,8 @@ import os
 from typing import Any, cast
 
 import mjlab.envs.mdp as envs_mdp
+from mjlab.envs.mdp import dr
+
 import mujoco
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
@@ -58,8 +60,10 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     cfg.sim.njmax = 700
     cfg.sim.mujoco.iterations = 10
     cfg.sim.mujoco.ls_iterations = 20
-    cfg.sim.mujoco.ccd_iterations = 128
+    cfg.sim.mujoco.ccd_iterations = 500
     cfg.sim.mujoco.multiccd = False
+    cfg.sim.contact_sensor_maxmatch = 500
+    cfg.sim.nconmax = 45
 
     terrain_gen = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG_PLAY if play else NOISE_ONLY_TERRAINS_CFG)
     cfg.scene.terrain = InstinctTerrainImporterCfg(
@@ -70,6 +74,9 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         virtual_obstacles={},
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
+    geom_names = tuple(
+    f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 9)
+  )
 
     cfg.scene.sensors = (
         ContactSensorCfg(
@@ -133,13 +140,13 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             heading_control_stiffness=2.0,
             rel_standing_envs=0.05,
             ranges=PoseVelocityCommandCfg.Ranges(
-                lin_vel_x=(0.0, 0.0),
+                lin_vel_x=(0.0, 1.0),
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
             random_velocity_terrain=["perlin_rough"],
             velocity_ranges={
-                "perlin_rough": {"lin_vel_x": (0.45, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "perlin_rough": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -179,7 +186,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "joint_vel": ObservationTermCfg(
             func=envs_mdp.joint_vel_rel,
             params={"asset_cfg": SceneEntityCfg(name="robot", joint_names=".*")},
-            noise=UniformNoiseCfg(n_min=-0.5, n_max=0.5),
+            noise=UniformNoiseCfg(n_min=-1.5, n_max=1.5),
             scale=0.05,
             history_length=8,
             flatten_history_dim=True,
@@ -480,6 +487,51 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "velocity_range": (0.0, 0.0),
             },
         ),
+        "encoder_bias": EventTermCfg(
+        mode="startup",
+        func=dr.encoder_bias,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "bias_range": (-0.015, 0.015),
+        },
+        ),
+        "base_com": EventTermCfg(
+            mode="startup",
+            func=instinct_envs_mdp.randomize_rigid_body_com,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
+                "com_range": {
+                    "x": (-0.025, 0.025),
+                    "y": (-0.025, 0.025),
+                    "z": (-0.03, 0.03),
+                },
+            },
+        ),
+    "push_robot": EventTermCfg(
+      func=envs_mdp.push_by_setting_velocity,
+      mode="interval",
+      interval_range_s=(1.0, 3.0),
+      params={
+        "velocity_range": {
+          "x": (-0.5, 0.5),
+          "y": (-0.5, 0.5),
+          "z": (-0.4, 0.4),
+          "roll": (-0.52, 0.52),
+          "pitch": (-0.52, 0.52),
+          "yaw": (-0.78, 0.78),
+        },
+      },
+    ),
+    "foot_friction": EventTermCfg(
+      mode="startup",
+      func=dr.geom_friction,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),  # Set per-robot.
+        "operation": "abs",
+        "ranges": (0.3, 1.2),
+        "shared_random": True,  # All foot geoms share the same friction.
+      },
+    ),
     }
 
     setattr(cfg, "run_name", "AdamSPParkourSimple")
