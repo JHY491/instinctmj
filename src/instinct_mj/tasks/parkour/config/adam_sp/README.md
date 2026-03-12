@@ -35,6 +35,21 @@ instinct-train Instinct-Parkour-Simple-Adam-SP-v0
 
 可选常用参数：`--num-envs`、`--video` 等，与项目其他任务一致。
 
+**脚本方式（可指定环境数量、后台运行）**：在仓库根目录执行
+
+```bash
+# 前台，默认环境数
+./scripts/train_parkour_adam_sp.sh
+
+# 指定环境数量（例如 4096）
+./scripts/train_parkour_adam_sp.sh -n 4096
+./scripts/train_parkour_adam_sp.sh --num-envs 2048
+
+# 后台运行，日志写入 logs/instinct_rl/
+./scripts/train_parkour_adam_sp.sh -n 4096 -b
+./scripts/train_parkour_adam_sp.sh --num-envs 8192 --background
+```
+
 ## 回放
 
 加载已训练 run 进行回放（`--load-run` 建议用绝对路径或明确 run 名）：
