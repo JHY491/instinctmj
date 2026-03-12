@@ -162,7 +162,7 @@ class TerrainImporter(TerrainEntityBase):
     Operations - Import.
     """
 
-    def import_ground_plane(self, name: str):
+    def _import_ground_plane(self, name: str):
         """Import a flat MuJoCo plane terrain."""
         if getattr(self, "_hacked_terrain_type", None) == "hacked_generator":
             # check config is provided

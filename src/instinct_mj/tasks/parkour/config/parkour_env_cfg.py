@@ -277,6 +277,43 @@ ROUGH_TERRAINS_CFG_PLAY = copy.deepcopy(ROUGH_TERRAINS_CFG)
 ROUGH_TERRAINS_CFG_PLAY.num_rows = 4
 ROUGH_TERRAINS_CFG_PLAY.num_cols = 10
 
+# Noise-only terrain (no walls), for simple parkour.
+NOISE_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
+    seed=0,
+    size=(8.0, 8.0),
+    border_width=3.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.07,
+    vertical_scale=0.005,
+    slope_threshold=1.0,
+    curriculum=True,
+    add_lights=True,
+    sub_terrains={
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=1.0,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
+                ),
+            },
+        ),
+    },
+)
+NOISE_ONLY_TERRAINS_CFG_PLAY = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG)
+NOISE_ONLY_TERRAINS_CFG_PLAY.num_rows = 4
+NOISE_ONLY_TERRAINS_CFG_PLAY.num_cols = 10
+
 
 # ---------------------------------------------------------------------------
 # Curriculum

@@ -148,7 +148,7 @@
                         <body name="LR_FOOT" pos="0.04 0 -0.037">
                           <inertial pos="0 0 0" mass="1e-09" diaginertia="0 0 0" />
                         </body>
-                        <site name="right_foot" pos="0.04 0 -0.037" size="0.01" rgba="1 0 0 1" />
+                        <site name="right_foot" pos="0.04 0 -0.037" size="0.01" rgba="1 0 0 0" />
                       </body>
                     </body>
                   </body>

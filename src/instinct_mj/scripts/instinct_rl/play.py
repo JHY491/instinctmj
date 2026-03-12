@@ -17,7 +17,8 @@ from instinct_rl.runners import OnPolicyRunner
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
-from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
+from mjlab.viewer import NativeMujocoViewer
+from instinct_mj.viewer import InstinctViserPlayViewer
 
 import instinct_mj.tasks  # noqa: F401
 from instinct_mj.envs import InstinctRlEnv
@@ -228,6 +229,12 @@ def _resolve_checkpoint(
         if not checkpoint.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
         return checkpoint
+
+    # If load_run is a path to an existing checkpoint file, use it directly.
+    if cfg.load_run not in (None, ""):
+        candidate = Path(cfg.load_run).expanduser().resolve()
+        if candidate.is_file():
+            return candidate
 
     log_root_path = Path("logs") / "instinct_rl" / agent_cfg.experiment_name
     run_regex = cfg.load_run if cfg.load_run not in (None, "") else agent_cfg.load_run
@@ -554,7 +561,7 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
         _force_viewer_realtime_1x(viewer)
         viewer.run(num_steps=rollout_steps)
     elif viewer_backend == "viser":
-        viewer = ViserPlayViewer(viewer_env, policy)
+        viewer = InstinctViserPlayViewer(viewer_env, policy)
         _force_viewer_realtime_1x(viewer)
         viewer.run(num_steps=rollout_steps)
     elif viewer_backend == "none":
