@@ -1,10 +1,11 @@
-"""Adam SP simple parkour: noise-only terrain, no vision, no AMP, no MoE."""
+"""Adam SP simple parkour: noise-only terrain, no vision, with AMP, no MoE."""
 
 from __future__ import annotations
 
 import copy
 import math
 import os
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 import mjlab.envs.mdp as envs_mdp
@@ -28,7 +29,22 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
-from instinct_mj.assets.adam_sp import ADAM_SP_MJCF_PATH
+import mjlab.tasks.velocity.mdp as velocity_mdp
+from instinct_mj.assets.adam_sp import (
+    ADAM_SP_MJCF_PATH,
+    adam_sp_symmetric_augmentation_joint_mapping,
+    adam_sp_symmetric_augmentation_joint_reverse_buf,
+)
+from instinct_mj.motion_reference import MotionReferenceManagerCfg
+from instinct_mj.motion_reference.motion_files.amass_motion_cfg import AmassMotionCfg as AmassMotionCfgBase
+from instinct_mj.motion_reference.utils import motion_interpolate_bilinear
+from instinct_mj.tasks.mdp import (
+    parkour_amp_reference_base_ang_vel,
+    parkour_amp_reference_base_lin_vel,
+    parkour_amp_reference_joint_pos_rel,
+    parkour_amp_reference_joint_vel_rel,
+    parkour_amp_reference_projected_gravity,
+)
 from instinct_mj.tasks.parkour.config.adam_sp.env_cfgs import adam_sp_flat_parkour_env_cfg
 from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
     NOISE_ONLY_TERRAINS_CFG,
@@ -39,13 +55,66 @@ from instinct_mj.tasks.parkour.mdp.commands import PoseVelocityCommandCfg
 from instinct_mj.terrains.terrain_importer_cfg import TerrainImporterCfg as InstinctTerrainImporterCfg
 
 __file_dir__ = os.path.dirname(os.path.realpath(__file__))
+# NOTE: Change this to your local parkour dataset root before training / play.
+_PARKOUR_DATASET_DIR = os.path.expanduser("/home/yangrr/codes/InstinctMJ/src/instinct_mj/motions")
+
+
+# ---------------------------------------------------------------------------
+# Motion reference configs
+# ---------------------------------------------------------------------------
+
+
+@dataclass(kw_only=True)
+class AmassMotionCfg(AmassMotionCfgBase):
+    """Parkour AMASS motion buffer config for Adam SP."""
+
+    path: str = _PARKOUR_DATASET_DIR
+    retargetting_func: object | None = None
+    filtered_motion_selection_filepath: str | None = os.path.join(
+        _PARKOUR_DATASET_DIR, "motion_reference.yaml"
+    )
+    motion_start_from_middle_range: list[float] = field(default_factory=lambda: [0.0, 0.9])
+    motion_start_height_offset: float = 0.0
+    ensure_link_below_zero_ground: bool = False
+    buffer_device: str = "output_device"
+    motion_interpolate_func: object = field(default_factory=lambda: motion_interpolate_bilinear)
+    velocity_estimation_method: str = "frontward"
+
+
+motion_reference_cfg = MotionReferenceManagerCfg(
+    name="motion_reference",
+    entity_name="robot",
+    robot_model_path=ADAM_SP_MJCF_PATH,
+    link_of_interests=[
+        "pelvis",
+        "torso_link",
+        "left_shoulder_roll_link",
+        "right_shoulder_roll_link",
+        "left_elbow_link",
+        "right_elbow_link",
+        "left_hip_roll_link",
+        "right_hip_roll_link",
+        "left_knee_link",
+        "right_knee_link",
+        "left_ankle_roll_link",
+        "right_ankle_roll_link",
+    ],
+    symmetric_augmentation_link_mapping=[0, 1, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10],
+    symmetric_augmentation_joint_mapping=list(adam_sp_symmetric_augmentation_joint_mapping),
+    symmetric_augmentation_joint_reverse_buf=list(adam_sp_symmetric_augmentation_joint_reverse_buf),
+    frame_interval_s=0.02,
+    update_period=0.02,
+    num_frames=10,
+    motion_buffers={"run_walk": AmassMotionCfg()},
+    mp_split_method="Even",
+)
 
 
 def instinct_adam_sp_parkour_simple_env_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Adam SP parkour with noise-only terrain, no vision/AMP/MoE."""
+    """Adam SP parkour with noise-only terrain, with AMP, no vision/MoE."""
     cfg = adam_sp_flat_parkour_env_cfg(play=play, has_state_estimation=True)
     setattr(cfg, "monitors", {})
     cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
@@ -63,7 +132,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     cfg.sim.mujoco.ccd_iterations = 500
     cfg.sim.mujoco.multiccd = False
     cfg.sim.contact_sensor_maxmatch = 500
-    cfg.sim.nconmax = 45
+    cfg.sim.nconmax = 65
 
     terrain_gen = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG_PLAY if play else NOISE_ONLY_TERRAINS_CFG)
     cfg.scene.terrain = InstinctTerrainImporterCfg(
@@ -130,6 +199,11 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             debug_vis=False,
         ),
     )
+    motion_reference_sensor_cfg = copy.deepcopy(motion_reference_cfg)
+    existing_sensors = tuple(
+        sensor_cfg for sensor_cfg in cfg.scene.sensors if sensor_cfg.name != motion_reference_sensor_cfg.name
+    )
+    cfg.scene.sensors = existing_sensors + (motion_reference_sensor_cfg,)
 
     cfg.commands = {
         "base_velocity": PoseVelocityCommandCfg(
@@ -252,6 +326,102 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     )
     cfg.observations.pop("actor", None)
 
+    amp_policy_terms = {
+        "projected_gravity": ObservationTermCfg(
+            func=envs_mdp.projected_gravity,
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "joint_pos_rel": ObservationTermCfg(
+            func=envs_mdp.joint_pos_rel,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    name="robot",
+                    joint_names=".*",
+                )
+            },
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "joint_vel": ObservationTermCfg(
+            func=envs_mdp.joint_vel_rel,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    name="robot",
+                    joint_names=".*",
+                )
+            },
+            scale=0.05,
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "base_lin_vel": ObservationTermCfg(
+            func=envs_mdp.base_lin_vel,
+            params={"asset_cfg": SceneEntityCfg(name="robot")},
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "base_ang_vel": ObservationTermCfg(
+            func=envs_mdp.base_ang_vel,
+            params={"asset_cfg": SceneEntityCfg(name="robot")},
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+    }
+    amp_reference_terms = {
+        "projected_gravity": ObservationTermCfg(
+            func=parkour_amp_reference_projected_gravity,
+            params={"asset_cfg": SceneEntityCfg(name="motion_reference")},
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "joint_pos_rel": ObservationTermCfg(
+            func=parkour_amp_reference_joint_pos_rel,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    name="motion_reference",
+                    joint_names=".*",
+                )
+            },
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "joint_vel": ObservationTermCfg(
+            func=parkour_amp_reference_joint_vel_rel,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    name="motion_reference",
+                    joint_names=".*",
+                )
+            },
+            scale=0.05,
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "base_lin_vel": ObservationTermCfg(
+            func=parkour_amp_reference_base_lin_vel,
+            params={"asset_cfg": SceneEntityCfg(name="motion_reference")},
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+        "base_ang_vel": ObservationTermCfg(
+            func=parkour_amp_reference_base_ang_vel,
+            params={"asset_cfg": SceneEntityCfg(name="motion_reference")},
+            history_length=10,
+            flatten_history_dim=True,
+        ),
+    }
+    cfg.observations["amp_policy"] = ObservationGroupCfg(
+        terms=amp_policy_terms,
+        concatenate_terms=False,
+        enable_corruption=False,
+    )
+    cfg.observations["amp_reference"] = ObservationGroupCfg(
+        terms=amp_reference_terms,
+        concatenate_terms=False,
+        enable_corruption=False,
+    )
+
     cfg.rewards = {
         "track_lin_vel_xy_exp": RewardTermCfg(
             func=parkour_mdp.track_lin_vel_xy_exp,
@@ -276,7 +446,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
-            weight=-0.3,
+            weight=-0.,
             params={"command_name": "base_velocity", "offset": 4.0},
         ),
         "feet_air_time": RewardTermCfg(
@@ -286,6 +456,19 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "command_name": "base_velocity",
                 "sensor_name": "contact_forces",
                 "vel_threshold": 0.15,
+            },
+        ),
+        "feet_clearance": RewardTermCfg(
+            func=velocity_mdp.feet_clearance,
+            weight=-0.5,
+            params={
+                "target_height": 0.10,
+                "command_name": "base_velocity",
+                "command_threshold": 0.15,
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    site_names=("left_foot", "right_foot"),
+                ),
             },
         ),
         "feet_slide": RewardTermCfg(
@@ -360,14 +543,24 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                     "robot",
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
                 ),
-                "height_offset": 0.035,
+                "height_offset": 0.065,
+            },
+        ),
+
+        "both_feet_air_time": RewardTermCfg(
+            func=parkour_mdp.both_feet_air_time,
+            weight=-2.0,
+            params={
+                "sensor_name": "contact_forces",
+                "grace_period": 0.0,
+                "max_penalty_time": 0.2,
             },
         ),
         "feet_close_xy": RewardTermCfg(
             func=parkour_mdp.feet_close_xy_gauss,
             weight=0.4,
             params={
-                "threshold": 0.12,
+                "threshold": 0.24,
                 "asset_cfg": SceneEntityCfg(
                     "robot",
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
@@ -388,7 +581,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "freeze_upper_body": RewardTermCfg(
             func=parkour_mdp.joint_deviation_l1,
-            weight=-0.1,
+            weight=-0.5,
             params={
                 "asset_cfg": SceneEntityCfg(
                     "robot",
@@ -452,6 +645,15 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             func=parkour_mdp.root_height_below_env_origin_minimum,
             params={"minimum_height": 0.5},
         ),
+        "dataset_exhausted": TerminationTermCfg(
+            func=instinct_envs_mdp.dataset_exhausted,
+            time_out=True,
+            params={
+                "reference_cfg": SceneEntityCfg(name="motion_reference"),
+                "print_reason": False,
+                "reset_without_notice": True,
+            },
+        ),
     }
     cfg.events = {
         "physics_material": EventTermCfg(
@@ -510,7 +712,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     "push_robot": EventTermCfg(
       func=envs_mdp.push_by_setting_velocity,
       mode="interval",
-      interval_range_s=(1.0, 3.0),
+      interval_range_s=(5.0, 8.0),
       params={
         "velocity_range": {
           "x": (-0.5, 0.5),

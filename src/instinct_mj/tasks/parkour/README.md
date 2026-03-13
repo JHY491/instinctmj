@@ -6,6 +6,8 @@ Usage notes for the `InstinctMJ` parkour task family on `mjlab`.
 
 **Task IDs:**
 
+### G1 Robot
+
 - `Instinct-Parkour-Simple-G1-v0` (train, noise-only terrain, no vision/AMP/MoE)
 - `Instinct-Parkour-Simple-G1-Play-v0` (play, same)
 - `Instinct-Parkour-Target-G1-v0` (train, non-AMP)
@@ -13,7 +15,14 @@ Usage notes for the `InstinctMJ` parkour task family on `mjlab`.
 - `Instinct-Parkour-Target-Amp-G1-v0` (train, AMP)
 - `Instinct-Parkour-Target-Amp-G1-Play-v0` (play, AMP)
 
-1. For AMP parkour, go to `config/g1/g1_parkour_target_amp_cfg.py` and first update the local parkour dataset root:
+### Adam SP Robot
+
+- `Instinct-Parkour-Simple-Adam-SP-v0` (train, noise-only terrain, with AMP, no vision/MoE)
+- `Instinct-Parkour-Simple-Adam-SP-Play-v0` (play, same)
+
+1. For AMP parkour, update the local parkour dataset root in the corresponding config file:
+   - G1: `config/g1/g1_parkour_target_amp_cfg.py`
+   - Adam SP: `config/adam_sp/adam_sp_parkour_simple_cfg.py`
 
    ```python
    _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
@@ -21,32 +30,48 @@ Usage notes for the `InstinctMJ` parkour task family on `mjlab`.
 
    `AmassMotionCfg.path` uses `_PARKOUR_DATASET_DIR` directly. If your filtered motion list is not stored as `parkour_motion_without_run.yaml` under that directory, also update `filtered_motion_selection_filepath` in the same file.
 
-1. Train the policy:
+2. Train the policy:
 
 ```bash
+# G1
 instinct-train Instinct-Parkour-Target-G1-v0
 instinct-train Instinct-Parkour-Target-Amp-G1-v0
+
+# Adam SP
+instinct-train Instinct-Parkour-Simple-Adam-SP-v0
 ```
 
-1. Play trained policy (`--load-run` must be provided; absolute path is recommended. To visualize an untrained policy, use `--agent random`):
+3. Play trained policy (`--load-run` must be provided; absolute path is recommended. To visualize an untrained policy, use `--agent random`):
 
 ```bash
+# G1
 instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name> --viewer viser
 instinct-play Instinct-Parkour-Target-Amp-G1-Play-v0 --load-run <run_name>
+
+# Adam SP
+instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --viewer viser
 ```
 
-1. Export trained policy (`--load-run` must be provided, absolute path is recommended):
+4. Export trained policy (`--load-run` must be provided, absolute path is recommended):
 
 ```bash
+# G1
 instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name> --export-onnx
 instinct-play Instinct-Parkour-Target-Amp-G1-Play-v0 --load-run <run_name> --export-onnx
+
+# Adam SP
+instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --export-onnx
 ```
 
-1. Use the exported ONNX policy for play:
+5. Use the exported ONNX policy for play:
 
 ```bash
+# G1
 instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name> --use-onnx
 instinct-play Instinct-Parkour-Target-Amp-G1-Play-v0 --load-run <run_name> --use-onnx
+
+# Adam SP
+instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --use-onnx
 ```
 
 ## Common Options

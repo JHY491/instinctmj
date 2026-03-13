@@ -6,7 +6,7 @@
 
 | 任务 ID | 用途 | 说明 |
 |--------|------|------|
-| `Instinct-Parkour-Simple-Adam-SP-v0` | 训练 | 仅噪声地形，无视觉 / 无 AMP / 无 MoE |
+| `Instinct-Parkour-Simple-Adam-SP-v0` | 训练 | 仅噪声地形，带 AMP，无视觉 / 无 MoE |
 | `Instinct-Parkour-Simple-Adam-SP-Play-v0` | 回放 | 同上，用于查看/评测 |
 
 后续可扩展：Target（无 AMP）、Target-Amp 等任务 ID，与 G1 对应任务类似。
@@ -17,15 +17,32 @@
   基础 flat 环境：`adam_sp_flat_parkour_env_cfg(play, has_state_estimation)`，供 simple/target 等 parkour 配置在其上叠加地形、传感器、奖励等。
 
 - **`adam_sp_parkour_simple_cfg.py`**  
-  Simple parkour 环境与 final 配置：
-  - `instinct_adam_sp_parkour_simple_env_cfg(play=False)`：噪声地形、足端接触/射线、速度命令、课程等。
+  Simple parkour 环境与 final 配置（带 AMP）：
+  - `instinct_adam_sp_parkour_simple_env_cfg(play=False)`：噪声地形、足端接触/射线、速度命令、AMP 观测、课程等。
   - `instinct_adam_sp_parkour_simple_final_cfg(play=False)`：在之上加 play 时的 viewer 等最终配置。
+  - AMP 相关：`AmassMotionCfg`、`motion_reference_cfg`，参考 G1 parkour AMP 实现。
 
 - **`agents/instinct_rl_ppo_simple_cfg.py`**  
-  PPO 训练配置：`adam_parkour_simple_ppo_runner_cfg()`，ActorCritic + PPO，无 AMP/MoE。
+  PPO 训练配置：`adam_parkour_simple_ppo_runner_cfg()`，ActorCritic + PPO。
 
 - **`__init__.py`**  
   将上述 env_cfg 与 runner_cfg 注册为 `Instinct-Parkour-Simple-Adam-SP-v0` / `Instinct-Parkour-Simple-Adam-SP-Play-v0`。
+
+## AMP 配置
+
+Simple 任务现已集成 AMP（Adversarial Motion Priors）。使用前需配置运动数据集路径：
+
+1. 在 `adam_sp_parkour_simple_cfg.py` 中更新数据集路径：
+
+   ```python
+   _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
+   ```
+
+2. 如果过滤后的运动列表文件名不是 `parkour_motion_without_run.yaml`，也需要在 `AmassMotionCfg` 中更新 `filtered_motion_selection_filepath`。
+
+AMP 观测组：
+- `amp_policy`：机器人当前状态（projected_gravity、joint_pos_rel、joint_vel、base_lin_vel、base_ang_vel）
+- `amp_reference`：运动参考数据（同上，但从 motion_reference 传感器读取）
 
 ## 训练
 

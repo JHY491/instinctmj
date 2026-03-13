@@ -111,6 +111,34 @@ def feet_air_time(
     return reward
 
 
+def both_feet_air_time(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    grace_period: float = 0.0,       # 任何腾空时间都会产生惩罚
+    max_penalty_time: float = 0.2,
+) -> torch.Tensor:
+    """Penalize simultaneous flight time to discourage two-foot hopping.
+    
+    Now penalizes ANY time both feet are off the ground, regardless of command velocity.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    air_time = contact_sensor.data.current_air_time
+    contact_time = contact_sensor.data.current_contact_time
+    
+    assert air_time is not None
+    assert contact_time is not None
+
+    # 判断是否双足都未接触地面 (in_contact 为 False)
+    in_contact = contact_time > 0.0
+    both_feet_air = torch.sum(in_contact.int(), dim=1) == 0
+    
+    
+    return both_feet_air.float()
+
+
+    
+
+
 def feet_slide(
     env: ManagerBasedRlEnv,
     sensor_name: str,
