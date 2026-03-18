@@ -54,10 +54,11 @@ TRAIN_CMD+=("${EXTRA_ARGS[@]}")
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 LOG_FILE="${LOG_DIR}/train_parkour_adam_sp_${TIMESTAMP}.log"
-# 过滤 MuJoCo 的 ccd_iterations 警告。
-# 这条告警在不同版本/路径下可能走 stdout 或 stderr，所以两边都过滤。
+# 过滤已知的 MuJoCo 刷屏警告。
+# 这些告警在不同版本/路径下可能走 stdout 或 stderr，所以两边都过滤。
 filter_output() {
-  grep --line-buffered -vE "^Warning: opt\.ccd_iterations, currently set to [0-9]+, needs to be increased\.$"
+  grep --line-buffered -vE \
+    "^Warning: opt\.ccd_iterations, currently set to [0-9]+, needs to be increased\.$|^contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+$"
 }
 
 if [[ "$BACKGROUND" == true ]]; then

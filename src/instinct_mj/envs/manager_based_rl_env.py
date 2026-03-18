@@ -133,7 +133,7 @@ class InstinctRlEnv(ManagerBasedRlEnv):
     def update_visualizers(self, visualizer: DebugVisualizer) -> None:
         super().update_visualizers(visualizer)
         terrain = self.scene.terrain
-        if terrain is not None:
+        if terrain is not None and hasattr(terrain, "debug_vis"):
             terrain.debug_vis(visualizer)
 
     def _reset_idx(self, env_ids: Sequence[int] | torch.Tensor) -> None:
