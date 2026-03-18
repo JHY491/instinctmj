@@ -23,7 +23,7 @@ class AmpAlgoCfg(InstinctRlPpoAlgorithmCfg):
             "nonlinearity": "ReLU",
         }
     )
-    discriminator_reward_coef: float = 0.25
+    discriminator_reward_coef: float = 0.4
     discriminator_reward_type: str = "quad"
     discriminator_loss_func: str = "MSELoss"
     discriminator_gradient_penalty_coef: float = 5.0

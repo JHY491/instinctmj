@@ -208,12 +208,14 @@ def _resolve_tracking_motion(_task_id: str, cfg: PlayConfig, env_cfg) -> None:
 def _build_dummy_policy(agent_mode: str, action_shape: tuple[int, ...], device: str):
     if agent_mode == "zero":
 
-        def zero_policy(_obs: torch.Tensor) -> torch.Tensor:
+        def zero_policy(obs: torch.Tensor) -> torch.Tensor:
+            del obs
             return torch.zeros(action_shape, device=device)
 
         return zero_policy
 
-    def random_policy(_obs: torch.Tensor) -> torch.Tensor:
+    def random_policy(obs: torch.Tensor) -> torch.Tensor:
+        del obs
         return 2.0 * torch.rand(action_shape, device=device) - 1.0
 
     return random_policy
@@ -339,12 +341,13 @@ def _build_parkour_onnx_policy(
 
     from instinct_mj.tasks.parkour.scripts.onnxer import load_parkour_onnx_model
 
-    encoder_path = model_dir / "0-depth_encoder.onnx"
-    actor_path = model_dir / "actor.onnx"
-    missing_files = [str(path) for path in (encoder_path, actor_path) if not path.exists()]
-    if missing_files:
-        missing_lines = "\n".join(f"  - {path}" for path in missing_files)
-        raise FileNotFoundError(f"Missing ONNX model files:\n{missing_lines}")
+    if (model_dir / "policy.onnx").exists():
+        return load_parkour_onnx_model(
+            model_dir=str(model_dir),
+            get_subobs_func=lambda obs: obs,
+            depth_shape=(),
+            proprio_slice=slice(0, 0),
+        )
 
     obs_segments = vec_env.get_obs_format()["policy"]
     if "depth_image" not in obs_segments:
@@ -387,6 +390,10 @@ def _export_policy_to_onnx(
     export_dir.mkdir(parents=True, exist_ok=True)
     observations, _ = vec_env.get_observations()
     runner.export_as_onnx(obs=observations, export_model_dir=str(export_dir))
+    if "Parkour" in task_id:
+        from instinct_mj.tasks.parkour.scripts.onnxer import export_parkour_onnx_model
+
+        export_parkour_onnx_model(runner=runner, obs=observations, export_dir=str(export_dir))
 
     metadata = {
         "task_id": task_id,
@@ -394,6 +401,8 @@ def _export_policy_to_onnx(
         "num_actions": vec_env.num_actions,
         "num_rewards": vec_env.num_rewards,
     }
+    if "Parkour" in task_id:
+        metadata["entry_model"] = "policy.onnx"
     metadata_path = export_dir / "metadata.json"
     metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),

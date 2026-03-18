@@ -86,13 +86,13 @@ instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --agent random
 导出 ONNX：
 
 ```bash
-instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --export-onnx
+instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --export-onnx True
 ```
 
 使用已导出的 ONNX 推理回放：
 
 ```bash
-instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --use-onnx
+instinct-play Instinct-Parkour-Simple-Adam-SP-Play-v0 --load-run <run_name> --use-onnx True
 ```
 
 ## 机器人说明

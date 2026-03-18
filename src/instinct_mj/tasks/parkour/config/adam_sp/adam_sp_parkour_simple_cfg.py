@@ -49,6 +49,8 @@ from instinct_mj.tasks.parkour.config.adam_sp.env_cfgs import adam_sp_flat_parko
 from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
     NOISE_ONLY_TERRAINS_CFG,
     NOISE_ONLY_TERRAINS_CFG_PLAY,
+    STAIRS_ONLY_TERRAINS_CFG,
+    STAIRS_ONLY_TERRAINS_CFG_PLAY,
     _edit_parkour_scene_spec,
 )
 from instinct_mj.tasks.parkour.mdp.commands import PoseVelocityCommandCfg
@@ -56,7 +58,7 @@ from instinct_mj.terrains.terrain_importer_cfg import TerrainImporterCfg as Inst
 
 __file_dir__ = os.path.dirname(os.path.realpath(__file__))
 # NOTE: Change this to your local parkour dataset root before training / play.
-_PARKOUR_DATASET_DIR = os.path.expanduser("/home/yangrr/codes/InstinctMJ/src/instinct_mj/motions")
+_PARKOUR_DATASET_DIR = os.path.expanduser("src/instinct_mj/motions")
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +136,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     cfg.sim.contact_sensor_maxmatch = 500
     cfg.sim.nconmax = 65
 
-    terrain_gen = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG_PLAY if play else NOISE_ONLY_TERRAINS_CFG)
+    terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
     cfg.scene.terrain = InstinctTerrainImporterCfg(
         terrain_type="hacked_generator",
         terrain_generator=terrain_gen,
@@ -144,8 +146,8 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     geom_names = tuple(
-    f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 9)
-  )
+        f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 9)
+    )
 
     cfg.scene.sensors = (
         ContactSensorCfg(
@@ -218,9 +220,9 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
-            random_velocity_terrain=["perlin_rough"],
+            random_velocity_terrain=["pyramid_stairs"],
             velocity_ranges={
-                "perlin_rough": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -514,7 +516,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             weight=-1e-4,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
         ),
-        "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.01),
+        "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.05),
         "flat_orientation_l2": RewardTermCfg(func=envs_mdp.flat_orientation_l2, weight=-3.0),
         "pelvis_orientation_l2": RewardTermCfg(
             func=parkour_mdp.link_orientation,
@@ -690,12 +692,12 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             },
         ),
         "encoder_bias": EventTermCfg(
-        mode="startup",
-        func=dr.encoder_bias,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "bias_range": (-0.015, 0.015),
-        },
+            mode="startup",
+            func=dr.encoder_bias,
+            params={
+                "asset_cfg": SceneEntityCfg("robot"),
+                "bias_range": (-0.015, 0.015),
+            },
         ),
         "base_com": EventTermCfg(
             mode="startup",
@@ -709,31 +711,31 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 },
             },
         ),
-    "push_robot": EventTermCfg(
-      func=envs_mdp.push_by_setting_velocity,
-      mode="interval",
-      interval_range_s=(5.0, 8.0),
-      params={
-        "velocity_range": {
-          "x": (-0.5, 0.5),
-          "y": (-0.5, 0.5),
-          "z": (-0.4, 0.4),
-          "roll": (-0.52, 0.52),
-          "pitch": (-0.52, 0.52),
-          "yaw": (-0.78, 0.78),
-        },
-      },
-    ),
-    "foot_friction": EventTermCfg(
-      mode="startup",
-      func=dr.geom_friction,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),  # Set per-robot.
-        "operation": "abs",
-        "ranges": (0.3, 1.2),
-        "shared_random": True,  # All foot geoms share the same friction.
-      },
-    ),
+        "push_robot": EventTermCfg(
+            func=envs_mdp.push_by_setting_velocity,
+            mode="interval",
+            interval_range_s=(5.0, 8.0),
+            params={
+                "velocity_range": {
+                    "x": (-0.5, 0.5),
+                    "y": (-0.5, 0.5),
+                    "z": (-0.4, 0.4),
+                    "roll": (-0.52, 0.52),
+                    "pitch": (-0.52, 0.52),
+                    "yaw": (-0.78, 0.78),
+                },
+            },
+        ),
+        "foot_friction": EventTermCfg(
+            mode="startup",
+            func=dr.geom_friction,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", geom_names=geom_names),  # Set per-robot.
+                "operation": "abs",
+                "ranges": (0.3, 1.2),
+                "shared_random": True,  # All foot geoms share the same friction.
+            },
+        ),
     }
 
     setattr(cfg, "run_name", "AdamSPParkourSimple")

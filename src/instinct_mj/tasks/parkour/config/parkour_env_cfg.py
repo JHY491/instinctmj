@@ -327,9 +327,36 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     curriculum=True,
     add_lights=True,
     sub_terrains={
-        "pyramid_stairs": PerlinInvertedPyramidStairsTerrainCfg(
-            proportion=1.0,
-            step_height_range=(0.0, 0.20),
+        "pyramid_stairs": PerlinPyramidStairsTerrainCfg(
+            proportion=0.5,
+            step_height_range=(0.05, 0.20),
+            step_width=0.3,
+            platform_width=2.5,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            perlin_cfg=PerlinPlaneTerrainCfg(
+                noise_scale=0.05,
+                noise_frequency=20,
+                fractal_octaves=2,
+                fractal_lacunarity=2.0,
+                fractal_gain=0.25,
+                centering=True,
+            ),
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(-0.0, 0.0),
+                ),
+            },
+        ),
+        "pyramid_stairs_inv": PerlinInvertedPyramidStairsTerrainCfg(
+            proportion=0.5,
+            step_height_range=(0.05, 0.20),
             step_width=0.3,
             platform_width=2.5,
             border_width=1.0,
