@@ -301,9 +301,10 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
-            random_velocity_terrain=["pyramid_stairs"],
+            random_velocity_terrain=[],
             velocity_ranges={
                 "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "pyramid_stairs_inv": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
