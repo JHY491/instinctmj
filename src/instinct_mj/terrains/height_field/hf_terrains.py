@@ -202,6 +202,270 @@ def perlin_pyramid_stairs_terrain(difficulty: float, cfg: hf_terrains_cfg.Perlin
     return np.rint(hf_raw).astype(np.int16)
 
 
+def _one_sided_stairs_heightfield_neg_x(
+    width_pixels: int,
+    length_pixels: int,
+    step_width_px: int,
+    step_height_i: int,
+    platform_width_px: int,
+) -> np.ndarray:
+    """Stairs climb along +x from x=0 (low) toward a flat platform at high x."""
+    hf_raw = np.zeros((width_pixels, length_pixels), dtype=np.float64)
+    if platform_width_px <= 0 or platform_width_px >= width_pixels:
+        return np.rint(hf_raw).astype(np.int16)
+    if step_width_px <= 0:
+        step_width_px = 1
+
+    current_h = 0.0
+    x = 0
+    while x < width_pixels - platform_width_px:
+        nx = min(x + step_width_px, width_pixels - platform_width_px)
+        hf_raw[x:nx, :] = current_h
+        current_h += float(step_height_i)
+        x = nx
+    hf_raw[width_pixels - platform_width_px :, :] = current_h
+    return np.rint(hf_raw).astype(np.int16)
+
+
+def _one_sided_stairs_heightfield_neg_y(
+    width_pixels: int,
+    length_pixels: int,
+    step_width_px: int,
+    step_height_i: int,
+    platform_width_px: int,
+) -> np.ndarray:
+    """Stairs climb along +y from y=0 (low) toward a flat platform at high y."""
+    hf_raw = np.zeros((width_pixels, length_pixels), dtype=np.float64)
+    if platform_width_px <= 0 or platform_width_px >= length_pixels:
+        return np.rint(hf_raw).astype(np.int16)
+    if step_width_px <= 0:
+        step_width_px = 1
+
+    current_h = 0.0
+    y = 0
+    while y < length_pixels - platform_width_px:
+        ny = min(y + step_width_px, length_pixels - platform_width_px)
+        hf_raw[:, y:ny] = current_h
+        current_h += float(step_height_i)
+        y = ny
+    hf_raw[:, length_pixels - platform_width_px :] = current_h
+    return np.rint(hf_raw).astype(np.int16)
+
+
+def _one_sided_up_down_stairs_heightfield_x(
+    width_pixels: int,
+    length_pixels: int,
+    step_width_px: int,
+    step_height_i: int,
+    platform_width_px: int,
+) -> np.ndarray:
+    """Low at both x edges; ascend to a center platform, then descend (symmetric along x)."""
+    hf_raw = np.zeros((width_pixels, length_pixels), dtype=np.float64)
+    if step_width_px <= 0:
+        step_width_px = 1
+    if width_pixels <= 1:
+        return np.rint(hf_raw).astype(np.int16)
+    if platform_width_px < 1:
+        platform_width_px = 1
+    if platform_width_px > width_pixels:
+        platform_width_px = width_pixels
+    rise_span_px = max(0, (width_pixels - platform_width_px) // 2)
+    max_steps = rise_span_px // step_width_px
+    for x in range(width_pixels):
+        steps_left = x // step_width_px
+        steps_right = (width_pixels - 1 - x) // step_width_px
+        si = min(steps_left, steps_right, max_steps)
+        hf_raw[x, :] = float(si * step_height_i)
+    return np.rint(hf_raw).astype(np.int16)
+
+
+def _one_sided_up_down_stairs_heightfield_y(
+    width_pixels: int,
+    length_pixels: int,
+    step_width_px: int,
+    step_height_i: int,
+    platform_width_px: int,
+) -> np.ndarray:
+    """Low at both y edges; ascend to a center platform, then descend (symmetric along y)."""
+    hf_raw = np.zeros((width_pixels, length_pixels), dtype=np.float64)
+    if step_width_px <= 0:
+        step_width_px = 1
+    if length_pixels <= 1:
+        return np.rint(hf_raw).astype(np.int16)
+    if platform_width_px < 1:
+        platform_width_px = 1
+    if platform_width_px > length_pixels:
+        platform_width_px = length_pixels
+    rise_span_px = max(0, (length_pixels - platform_width_px) // 2)
+    max_steps = rise_span_px // step_width_px
+    for y in range(length_pixels):
+        steps_left = y // step_width_px
+        steps_right = (length_pixels - 1 - y) // step_width_px
+        si = min(steps_left, steps_right, max_steps)
+        hf_raw[:, y] = float(si * step_height_i)
+    return np.rint(hf_raw).astype(np.int16)
+
+
+def _apply_lateral_width_strip(
+    *,
+    hf_raw: np.ndarray,
+    stair_face: str,
+    lateral_width_m: float | None,
+    horizontal_scale: float,
+) -> np.ndarray:
+    """Keep only a centered lateral strip for one-sided stairs."""
+    if lateral_width_m is None:
+        return hf_raw
+    lateral_width_m = float(lateral_width_m)
+    if lateral_width_m <= 0.0:
+        return hf_raw
+
+    width_pixels, length_pixels = hf_raw.shape
+    if stair_face in ("neg_y", "pos_y"):
+        lateral_axis_size = width_pixels
+        axis = 0
+    else:
+        lateral_axis_size = length_pixels
+        axis = 1
+
+    keep_pixels = int(round(lateral_width_m / float(horizontal_scale)))
+    keep_pixels = max(1, min(keep_pixels, lateral_axis_size))
+    start = max(0, (lateral_axis_size - keep_pixels) // 2)
+    end = min(lateral_axis_size, start + keep_pixels)
+
+    filtered = np.zeros_like(hf_raw, dtype=np.float64)
+    if axis == 0:
+        filtered[start:end, :] = hf_raw[start:end, :]
+    else:
+        filtered[:, start:end] = hf_raw[:, start:end]
+    return filtered
+
+
+def _resolve_lateral_width(lateral_width: float | tuple[float, float] | None) -> float | None:
+    """Resolve lateral width value, optionally sampling from a range."""
+    if lateral_width is None:
+        return None
+    if isinstance(lateral_width, tuple):
+        lo = float(lateral_width[0])
+        hi = float(lateral_width[1])
+        if lo > hi:
+            lo, hi = hi, lo
+        return float(np.random.uniform(lo, hi))
+    return float(lateral_width)
+
+
+@generate_wall
+@height_field_to_mesh
+def perlin_one_sided_stairs_terrain(
+    difficulty: float, cfg: hf_terrains_cfg.PerlinOneSidedStairsTerrainCfg
+) -> np.ndarray:
+    """Single-run stairs: steps along one axis only; perpendicular direction is flat.
+
+    Unlike :func:`perlin_pyramid_stairs_terrain`, only one edge is the low side; stairs
+    advance toward a flat platform at the opposite side. Height is uniform along the
+    axis perpendicular to the stair run.
+
+    For x: ``neg_x`` is low at x=0 and climbs with +x (upstairs); ``pos_x`` flips the
+    field so +x goes downhill (downstairs). For y: ``neg_y`` / ``pos_y`` behave analogously.
+
+    If ``cfg.up_down`` is True, one tile has **connected** stairs up then down along the
+    stair axis (``neg_x``/``pos_x`` → x, ``neg_y``/``pos_y`` → y); edges are low and the
+    center is highest.
+    """
+    step_height_phys = cfg.step_height_range[0] + difficulty * (
+        cfg.step_height_range[1] - cfg.step_height_range[0]
+    )
+    if cfg.inverted:
+        step_height_phys *= -1.0
+
+    width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
+    length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
+    step_width_px = max(1, round(cfg.step_width / cfg.horizontal_scale))
+    step_height_i = round(step_height_phys / cfg.vertical_scale)
+    platform_width_px = max(1, round(cfg.platform_width / cfg.horizontal_scale))
+
+    if cfg.up_down:
+        face = cfg.stair_face
+        if face in ("neg_x", "pos_x"):
+            hf_raw = _one_sided_up_down_stairs_heightfield_x(
+                width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+            ).astype(np.float64)
+            if face == "pos_x":
+                hf_raw = np.flip(hf_raw, axis=0)
+        elif face in ("neg_y", "pos_y"):
+            hf_raw = _one_sided_up_down_stairs_heightfield_y(
+                width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+            ).astype(np.float64)
+            if face == "pos_y":
+                hf_raw = np.flip(hf_raw, axis=1)
+        else:
+            raise ValueError(f"Unknown stair_face: {face!r}")
+
+        if cfg.perlin_cfg is not None:
+            perlin_cfg = cfg.perlin_cfg
+            perlin_cfg.size = cfg.size
+            perlin_cfg.horizontal_scale = cfg.horizontal_scale
+            perlin_cfg.vertical_scale = cfg.vertical_scale
+            perlin_cfg.slope_threshold = cfg.slope_threshold
+            perlin_noise = generate_perlin_noise(
+                difficulty,
+                perlin_cfg,  # type: ignore[arg-type]
+            )
+            hf_raw = hf_raw.astype(np.float64) + perlin_noise.astype(np.float64)
+
+        hf_raw = _apply_lateral_width_strip(
+            hf_raw=hf_raw,
+            stair_face=face,
+            lateral_width_m=_resolve_lateral_width(cfg.lateral_width),
+            horizontal_scale=cfg.horizontal_scale,
+        )
+
+        return np.rint(hf_raw).astype(np.int16)
+
+    face = cfg.stair_face
+    if face == "neg_x":
+        hf_raw = _one_sided_stairs_heightfield_neg_x(
+            width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+        ).astype(np.float64)
+    elif face == "pos_x":
+        hf_raw = _one_sided_stairs_heightfield_neg_x(
+            width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+        ).astype(np.float64)
+        hf_raw = np.flip(hf_raw, axis=0)
+    elif face == "neg_y":
+        hf_raw = _one_sided_stairs_heightfield_neg_y(
+            width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+        ).astype(np.float64)
+    elif face == "pos_y":
+        hf_raw = _one_sided_stairs_heightfield_neg_y(
+            width_pixels, length_pixels, step_width_px, step_height_i, platform_width_px
+        ).astype(np.float64)
+        hf_raw = np.flip(hf_raw, axis=1)
+    else:
+        raise ValueError(f"Unknown stair_face: {face!r}")
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        perlin_noise = generate_perlin_noise(
+            difficulty,
+            perlin_cfg,  # type: ignore[arg-type]
+        )
+        hf_raw = hf_raw.astype(np.float64) + perlin_noise.astype(np.float64)
+
+    hf_raw = _apply_lateral_width_strip(
+        hf_raw=hf_raw,
+        stair_face=face,
+        lateral_width_m=_resolve_lateral_width(cfg.lateral_width),
+        horizontal_scale=cfg.horizontal_scale,
+    )
+
+    return np.rint(hf_raw).astype(np.int16)
+
+
 @generate_wall
 @height_field_to_mesh
 def perlin_discrete_obstacles_terrain(

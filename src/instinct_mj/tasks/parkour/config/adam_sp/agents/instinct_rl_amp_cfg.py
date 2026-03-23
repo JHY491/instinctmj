@@ -96,7 +96,7 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     policy_observation_group: str = "policy"
     critic_observation_group: str = "critic"
     max_iterations: int = 30000
-    save_interval: int = 100
+    save_interval: int = 500
     log_interval: int = 10
     experiment_name: str = "adam_sp_parkour_simple_amp_vision"
     resume: bool = False

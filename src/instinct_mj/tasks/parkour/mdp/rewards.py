@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import torch
 from mjlab.managers import SceneEntityCfg
 from mjlab.sensor import ContactSensor, RayCastSensor
-from mjlab.utils.lab_api.math import quat_apply_inverse
+from mjlab.utils.lab_api.math import quat_apply, quat_apply_inverse
 
 if TYPE_CHECKING:
     from mjlab.entity import Entity
@@ -278,6 +278,47 @@ def feet_close_xy_gauss(
     feet_distance_y = torch.abs(left_y - right_y)
 
     return torch.exp(-torch.clamp(threshold - feet_distance_y, min=0.0) / std**2) - 1
+
+
+def feet_heading_alignment(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    cmd_threshold: float = 0.15,
+) -> torch.Tensor:
+    """Reward foot forward axes aligning with the commanded travel direction."""
+    asset: Entity = env.scene[asset_cfg.name]
+    command_b = env.command_manager.get_command(command_name)
+    assert command_b is not None
+    command_xy_b = command_b[:, :2]
+    command_norm = torch.linalg.vector_norm(command_xy_b, dim=-1)
+    is_active = command_norm > cmd_threshold
+
+    desired_dir_b = torch.zeros(env.num_envs, 3, device=command_b.device, dtype=command_b.dtype)
+    desired_dir_b[is_active, :2] = command_xy_b[is_active] / command_norm[is_active].unsqueeze(-1)
+    desired_dir_w = quat_apply(asset.data.root_link_quat_w, desired_dir_b)[:, :2]
+    desired_dir_w = desired_dir_w / torch.clamp(torch.linalg.vector_norm(desired_dir_w, dim=-1, keepdim=True), min=1e-6)
+
+    if isinstance(asset_cfg.body_ids, slice):
+        body_ids = list(range(asset.num_bodies))
+    else:
+        body_ids = list(asset_cfg.body_ids)
+    body_link_quat_w = asset.data.body_link_quat_w[:, body_ids, :]
+    num_envs, num_feet = body_link_quat_w.shape[:2]
+    foot_forward_local = torch.zeros(num_envs, num_feet, 3, device=command_b.device, dtype=command_b.dtype)
+    foot_forward_local[..., 0] = 1.0
+    foot_forward_w = quat_apply(body_link_quat_w.reshape(-1, 4), foot_forward_local.reshape(-1, 3)).reshape(
+        num_envs, num_feet, 3
+    )
+    foot_forward_xy = foot_forward_w[:, :, :2]
+    foot_forward_xy = foot_forward_xy / torch.clamp(
+        torch.linalg.vector_norm(foot_forward_xy, dim=-1, keepdim=True),
+        min=1e-6,
+    )
+
+    alignment = torch.sum(foot_forward_xy * desired_dir_w.unsqueeze(1), dim=-1)
+    alignment_reward = 0.5 * (alignment + 1.0)
+    return torch.mean(alignment_reward, dim=1) * is_active.float()
 
 
 def volume_points_penetration(

@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import mjlab.envs.mdp as envs_mdp
 from mjlab.envs.mdp import dr
+import instinct_mj.tasks.parkour.mdp.events as parkour_events
 
 import mujoco
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -129,7 +130,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
     cfg.viewer.entity_name = None
     cfg.viewer.body_name = None
-    cfg.scene.entities["robot"].init_state.pos = (0.0, 0.0, 0.9)
+    cfg.scene.entities["robot"].init_state.pos = (-4.0, 0.0, 0.89)
 
     cfg.scene.num_envs = 2048
     cfg.scene.env_spacing = 2.5
@@ -145,7 +146,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
     edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
-        cylinder_radius=0.05,
+        cylinder_radius=0.03,
         min_points=2,
         component_workers=0,
         merge_collinear_gap=0.09,
@@ -276,7 +277,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                     output_range=(0.0, 1.0),
                 ),
             },
-            data_histories={"distance_to_image_plane_noised": 37},
+            data_histories={"distance_to_image_plane_noised": 47},
             min_distance=0.1,
             max_distance=2.5,
             debug_vis=False,
@@ -303,8 +304,9 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             ),
             random_velocity_terrain=[],
             velocity_ranges={
-                "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "pyramid_stairs_inv": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                # "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                # "pyramid_stairs_inv": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "one_sided_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -360,7 +362,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "data_type": "distance_to_image_plane_noised_history",
                 "sensor_cfg": SceneEntityCfg("camera"),
                 "history_skip_frames": 5,
-                "num_output_frames": 8,
+                "num_output_frames": 10,
                 "delayed_frame_ranges": (0, 1),
                 "debug_vis": False,
             },
@@ -415,7 +417,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "data_type": "distance_to_image_plane_noised_history",
                 "sensor_cfg": SceneEntityCfg("camera"),
                 "history_skip_frames": 5,
-                "num_output_frames": 8,
+                "num_output_frames": 10,
                 "delayed_frame_ranges": (0, 1),
                 "debug_vis": False,
             },
@@ -559,7 +561,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
-            weight=-4.0,
+            weight=-1.0,
             params={"sensor_name": "leg_volume_points"},
         ),
         "feet_air_time": RewardTermCfg(
@@ -632,6 +634,18 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 ),
             },
         ),
+        "feet_heading_alignment": RewardTermCfg(
+            func=parkour_mdp.feet_heading_alignment,
+            weight=1.0,
+            params={
+                "command_name": "base_velocity",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                ),
+                "cmd_threshold": 0.,
+            },
+        ),
         "feet_at_plane": RewardTermCfg(
             func=parkour_mdp.feet_at_plane,
             weight=-0.1,
@@ -669,14 +683,25 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "normalize_by_stiffness": True,
             },
         ),
-        "freeze_upper_body": RewardTermCfg(
+        "freeze_waist_joints": RewardTermCfg(
             func=parkour_mdp.joint_deviation_l1,
-            weight=-0.5,
+            weight=-1.0,
             params={
                 "asset_cfg": SceneEntityCfg(
                     "robot",
                     # Adam SP has shoulders/elbows + waist, no wrist joints in 23DOF model.
-                    joint_names=(".*_shoulder_.*", ".*_elbow_.*", "waist_.*"),
+                    joint_names=("waist_.*"),
+                )
+            },
+        ),
+        "freeze_arm_joints": RewardTermCfg(
+            func=parkour_mdp.joint_deviation_l1,
+            weight=-1.0,
+            params={
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    # Adam SP has shoulders/elbows + waist, no wrist joints in 23DOF model.
+                    joint_names=(".*_shoulder_.*", ".*_elbow_.*"),
                 )
             },
         ),
@@ -765,10 +790,12 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             },
         ),
         "reset_base": EventTermCfg(
-            func=envs_mdp.reset_root_state_uniform,
+            func=parkour_events.reset_root_state_on_target_patch,
+            
             mode="reset",
             params={
-                "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)},
+                "patch_name": "target",
+                "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
                 "velocity_range": {
                     "x": (-0.2, 0.2),
                     "y": (-0.2, 0.2),
@@ -839,7 +866,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     if play:
         cfg.scene.num_envs = 10
         cfg.scene.env_spacing = 2.5
-        cfg.episode_length_s = 10.0
+        cfg.episode_length_s = 20.0
         terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
         terrain_generator.num_rows = 4
         terrain_generator.num_cols = 10
@@ -855,7 +882,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         cfg.commands["base_velocity"].debug_vis = True
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
-        cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = True
+        cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
         cfg.events["reset_robot_joints"].params = {
             "position_range": (0.0, 0.0),
             "velocity_range": (0.0, 0.0),

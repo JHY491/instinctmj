@@ -1,7 +1,7 @@
 import copy
 import uuid
 from dataclasses import MISSING, dataclass, field
-from typing import List
+from typing import List, Literal
 
 import mujoco
 import numpy as np
@@ -259,7 +259,6 @@ def _height_field_to_output(
     y1 = max(0, min(y1, heights_i16.shape[1] - 1))
     y2 = max(y1 + 1, min(y2, heights_i16.shape[1]))
     origin_z = float(np.max(heights_i16[x1:x2, y1:y2])) * float(cfg.vertical_scale)
-    origin = np.array([float(cfg.size[0]) * 0.5, float(cfg.size[1]) * 0.5, origin_z], dtype=np.float64)
 
     flat_patches: dict[str, np.ndarray] | None = None
     if cfg.flat_patch_sampling is not None:
@@ -275,6 +274,7 @@ def _height_field_to_output(
                 cfg=patch_cfg,
                 rng=rng,
             )
+    origin = np.array([float(cfg.size[0]) * 0.5, float(cfg.size[1]) * 0.5, origin_z], dtype=np.float64)
 
     geometries = [TerrainGeometry(geom=hfield_geom, hfield=hfield)]
     geometries.extend(_add_wall_geometries(body=body, cfg=cfg, rng=rng))
@@ -395,6 +395,31 @@ class HfInvertedPyramidStairsTerrainCfg(HfPyramidStairsTerrainCfg):
 
 
 @dataclass(kw_only=True)
+class HfOneSidedStairsTerrainCfg(HfTerrainBaseCfg):
+    """Single-run stairs: steps along one world axis; constant height along the other axis.
+
+    If ``up_down`` is False, ``stair_face`` picks the low edge: ``neg_x`` climbs toward +x;
+    ``pos_x`` is the x-mirror (down along +x); ``neg_y`` / ``pos_y`` along y.
+
+    If ``up_down`` is True, one tile has **connected** stairs up then down along the
+    chosen axis (``neg_x``/``pos_x`` → x, ``neg_y``/``pos_y`` → y); edges are low
+    and the center is highest. ``platform_width`` is unused in this mode.
+    """
+
+    step_height_range: tuple[float, float] = MISSING
+    step_width: float = MISSING
+    platform_width: float = 1.0
+    # Optional lateral usable width (meters) orthogonal to stair run direction.
+    # - None: use full terrain width.
+    # - float: fixed lateral width.
+    # - tuple(min, max): sample uniformly per generated sub-terrain.
+    lateral_width: float | tuple[float, float] | None = None
+    stair_face: Literal["neg_x", "pos_x", "neg_y", "pos_y"] = "neg_x"
+    inverted: bool = False
+    up_down: bool = False
+
+
+@dataclass(kw_only=True)
 class HfDiscreteObstaclesTerrainCfg(HfTerrainBaseCfg):
     obstacle_height_mode: str = "choice"
     obstacle_width_range: tuple[float, float] = MISSING
@@ -423,6 +448,7 @@ from . import hf_terrains
 _RAW_PERLIN_PLANE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_plane_terrain)
 _RAW_PERLIN_PYRAMID_SLOPED_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_sloped_terrain)
 _RAW_PERLIN_PYRAMID_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_stairs_terrain)
+_RAW_PERLIN_ONE_SIDED_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_one_sided_stairs_terrain)
 _RAW_PERLIN_DISCRETE_OBSTACLES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_discrete_obstacles_terrain)
 _RAW_PERLIN_WAVE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_wave_terrain)
 _RAW_PERLIN_STEPPING_STONES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stepping_stones_terrain)
@@ -522,6 +548,19 @@ class PerlinInvertedPyramidStairsTerrainCfg(HfInvertedPyramidStairsTerrainCfg, W
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
         return _RAW_PERLIN_PYRAMID_STAIRS_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+@dataclass(kw_only=True)
+class PerlinOneSidedStairsTerrainCfg(HfOneSidedStairsTerrainCfg, WallTerrainCfgMixin):
+    flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+
+    step_height_range: tuple[float, float] = MISSING
+    step_width: float = MISSING
+    platform_width: float = 1.0
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+
+    def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
+        return _RAW_PERLIN_ONE_SIDED_STAIRS_TERRAIN_FN(difficulty, cfg_for_gen)
 
 
 @dataclass(kw_only=True)
