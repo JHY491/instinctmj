@@ -167,7 +167,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     geom_names = tuple(
-        f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 9)
+        f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 5)
     )
 
     cfg.scene.sensors = (
@@ -306,7 +306,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             velocity_ranges={
                 # "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
                 # "pyramid_stairs_inv": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "one_sided_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "one_sided_stairs": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -795,7 +795,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             mode="reset",
             params={
                 "patch_name": "target",
-                "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
+                "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)},
                 "velocity_range": {
                     "x": (-0.2, 0.2),
                     "y": (-0.2, 0.2),

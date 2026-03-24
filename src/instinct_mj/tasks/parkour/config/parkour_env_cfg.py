@@ -408,7 +408,7 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
                     patch_radius=[0.05, 0.10, 0.15, 0.20],
                     max_height_diff=0.05,
                     x_range=(3.7, 3.7),
-                    y_range=(-1.2, 1.2),
+                    y_range=(0.0, 0.0),
                 ),
             },
         ),

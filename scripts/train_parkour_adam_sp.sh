@@ -65,7 +65,7 @@ LOG_FILE="${LOG_DIR}/train_parkour_adam_sp_${TIMESTAMP}.log"
 # 这些告警在不同版本/路径下可能走 stdout 或 stderr，所以两边都过滤。
 filter_output() {
   grep --line-buffered -vE \
-    "^Warning: opt\.ccd_iterations, currently set to [0-9]+, needs to be increased\.$|^contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+$"
+    "^Warning: opt\.ccd_iterations, currently set to [0-9]+, needs to be increased\.$|^contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+$|^height field collision overflow.*$|^[[:space:]]*decrease the number of hfield rows/cols or modify size of colliding geom[[:space:]]*$"
 }
 
 if [[ "$BACKGROUND" == true ]]; then
