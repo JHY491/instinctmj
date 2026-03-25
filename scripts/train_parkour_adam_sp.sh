@@ -11,6 +11,15 @@
 #   ./scripts/train_parkour_adam_sp.sh --gpu 1 -n 4096     # 指定使用第 1 张 GPU
 #   ./scripts/train_parkour_adam_sp.sh --num-envs 8192 --background
 #
+# 断点续训（默认不 resume，需显式加 --resume；传给 instinct-train 为 agent dot override）:
+#   ./scripts/train_parkour_adam_sp.sh --resume --load-run 2026-03-24_11-19-28 --checkpoint model_29500.pt
+# 等价于:
+#   instinct-train ... --agent.resume true \
+#     --agent.load-run 2026-03-24_11-19-28 \
+#     --agent.load-checkpoint model_29500.pt
+# （脚本内使用 --agent.load_run / --agent.load_checkpoint，因 dataclass 字段为下划线，与上式等价。）
+#   ./scripts/train_parkour_adam_sp.sh --resume --load-run /abs/path/to/run_dir --checkpoint model_29500.pt
+#
 
 set -e
 
@@ -21,9 +30,12 @@ LOG_DIR="${REPO_ROOT}/logs/instinct_rl"
 NUM_ENVS=""
 BACKGROUND=false
 CUDA_VISIBLE_DEVICES_VAL="0"
+RESUME=false
+LOAD_RUN_ARG=""
+CHECKPOINT_ARG=""
 EXTRA_ARGS=()
 
-# 解析 -n/--num-envs、-b/--background 与 --gpu，其余参数原样传递
+# 解析 -n/--num-envs、-b/--background、--gpu、续训相关选项，其余参数原样传递
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--num-envs)
@@ -36,6 +48,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gpu|--cuda-visible-devices)
       CUDA_VISIBLE_DEVICES_VAL="$2"
+      shift 2
+      ;;
+    --resume)
+      RESUME=true
+      shift
+      ;;
+    --load-run|--load_run)
+      LOAD_RUN_ARG="$2"
+      shift 2
+      ;;
+    --checkpoint)
+      CHECKPOINT_ARG="$2"
       shift 2
       ;;
     *)
@@ -56,6 +80,9 @@ fi
 
 TRAIN_CMD+=("$TASK_ID")
 [[ -n "$NUM_ENVS" ]] && TRAIN_CMD+=(--num-envs "$NUM_ENVS")
+[[ "$RESUME" == true ]] && TRAIN_CMD+=(--agent.resume true)
+[[ -n "$LOAD_RUN_ARG" ]] && TRAIN_CMD+=(--agent.load_run "$LOAD_RUN_ARG")
+[[ -n "$CHECKPOINT_ARG" ]] && TRAIN_CMD+=(--agent.load_checkpoint "$CHECKPOINT_ARG")
 TRAIN_CMD+=("${EXTRA_ARGS[@]}")
 
 mkdir -p "$LOG_DIR"

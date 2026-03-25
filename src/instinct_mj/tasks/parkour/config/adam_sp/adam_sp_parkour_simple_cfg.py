@@ -643,7 +643,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                     "robot",
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
                 ),
-                "cmd_threshold": 0.,
+                "cmd_threshold": 0.2,
             },
         ),
         "feet_at_plane": RewardTermCfg(
