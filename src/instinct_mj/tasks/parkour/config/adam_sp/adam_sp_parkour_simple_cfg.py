@@ -557,7 +557,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
             weight=-0.3,
-            params={"command_name": "base_velocity", "offset": 4.0},
+            params={"command_name": "base_velocity", "offset": 1.0},
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
@@ -618,10 +618,10 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.05),
         "flat_orientation_l2": RewardTermCfg(func=envs_mdp.flat_orientation_l2, weight=-3.0),
-        "pelvis_orientation_l2": RewardTermCfg(
+        "torso_orientation_l2": RewardTermCfg(
             func=parkour_mdp.link_orientation,
             weight=-3.0,
-            params={"asset_cfg": SceneEntityCfg("robot", body_names="pelvis")},
+            params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")},
         ),
         "feet_flat_ori": RewardTermCfg(
             func=parkour_mdp.feet_orientation_contact,

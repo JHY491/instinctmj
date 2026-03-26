@@ -286,7 +286,7 @@ def feet_heading_alignment(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     cmd_threshold: float = 0.15,
 ) -> torch.Tensor:
-    """Reward foot forward axes aligning with the commanded travel direction."""
+    """Reward foot forward axes aligning with the pelvis forward direction."""
     asset: Entity = env.scene[asset_cfg.name]
     command_b = env.command_manager.get_command(command_name)
     assert command_b is not None
@@ -295,7 +295,7 @@ def feet_heading_alignment(
     is_active = command_norm > cmd_threshold
 
     desired_dir_b = torch.zeros(env.num_envs, 3, device=command_b.device, dtype=command_b.dtype)
-    desired_dir_b[is_active, :2] = command_xy_b[is_active] / command_norm[is_active].unsqueeze(-1)
+    desired_dir_b[:, 0] = 1.0
     desired_dir_w = quat_apply(asset.data.root_link_quat_w, desired_dir_b)[:, :2]
     desired_dir_w = desired_dir_w / torch.clamp(torch.linalg.vector_norm(desired_dir_w, dim=-1, keepdim=True), min=1e-6)
 
@@ -319,6 +319,7 @@ def feet_heading_alignment(
     alignment = torch.sum(foot_forward_xy * desired_dir_w.unsqueeze(1), dim=-1)
     alignment_reward = 0.5 * (alignment + 1.0)
     return torch.mean(alignment_reward, dim=1) * is_active.float()
+
 
 
 def volume_points_penetration(
