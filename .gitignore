@@ -1,0 +1,17 @@
+# Training/runtime logs
+logs/
+log/
+*.log
+
+# Build metadata
+*.egg-info/
+
+.venv/
+.vscode/
+.pytest_cache/
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc.*

@@ -1,93 +1,260 @@
-# InstinctMj
+# InstinctMJ
 
+[![mjlab](https://img.shields.io/badge/framework-mjlab-4C7AF2.svg)](https://github.com/mujocolab/mjlab)
+[![MuJoCo Warp](https://img.shields.io/badge/simulator-MuJoCo%20Warp-silver.svg)](https://github.com/google-deepmind/mujoco_warp)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://docs.python.org/3/)
+[![Platform](https://img.shields.io/badge/platform-linux--x86__64-orange.svg)](https://releases.ubuntu.com/)
+[![instinct_rl](https://img.shields.io/badge/training-instinct__rl-brightgreen.svg)](https://github.com/project-instinct/instinct_rl)
 
+## Overview
 
-## Getting started
+This repository is the `mjlab-native port` of [InstinctLab](https://github.com/project-instinct/InstinctLab), serving as the environment side of [Project-Instinct](https://project-instinct.github.io/).
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+We aim to industrialize Reinforcement Learning for humanoid whole-body control, with task families implemented on top of `mjlab` and integrated into the Project-Instinct training workflow.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+**Key Features:**
 
-## Add your files
+- `Standalone package` Work outside the core `mjlab` repository while keeping task development self-contained.
+- `Task suite` Provide locomotion, shadowing, perceptive, and parkour task families for humanoid control on `mjlab`.
+- `Unified ecosystem` Integrate directly with [instinct_rl](https://github.com/project-instinct/instinct_rl) for train / play / export workflows.
+- `Structured outputs` Keep experiment logs under `logs/instinct_rl/<experiment_name>/<timestamp_run>/` to match the Project-Instinct workflow.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+**Keywords:** mjlab, mujoco-warp, instinct_rl, humanoid
 
-```
-cd existing_repo
-git remote add origin https://gitlab.pndbotics.com/YangRurui/instinctMj.git
-git branch -M main
-git push -uf origin main
-```
+## Warning
 
-## Integrate with your tools
+This codebase is under [CC BY-NC 4.0 license](LICENSE). You may not use the material for commercial purposes, for example to advertise commercial products or redistribute the code as part of a commercial offering.
 
-- [ ] [Set up project integrations](https://gitlab.pndbotics.com/YangRurui/instinctMj/-/settings/integrations)
+## Attention
 
-## Collaborate with your team
+Do not directly use checkpoints trained outside `InstinctMJ` with `InstinctMJ`.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+- `InstinctMJ` loads the robot from XML / MJCF, and the resulting joint order is not the same as the joint order used in IsaacLab.
+- Policy inputs / outputs tied to joint ordering are therefore not directly checkpoint-compatible across different simulator setups.
+- Please release and use weights trained in `InstinctMJ` for `InstinctMJ` tasks.
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CONTRIBUTOR_AGREEMENT.md](CONTRIBUTOR_AGREEMENT.md) for contribution requirements.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Installation
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- Install `mjlab` first by following the upstream setup instructions in the [mjlab repository](https://github.com/mujocolab/mjlab).
 
-## License
-For open source projects, say how it is licensed.
+- Install `instinct_rl` by following the [instinct_rl README](https://github.com/project-instinct/instinct_rl/blob/main/README.md).
+  TL; DR:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+  ```bash
+  git clone https://github.com/project-instinct/instinct_rl.git
+  python -m pip install -e instinct_rl
+  ```
+
+- Clone this repository into any common workspace directory as a sibling of `mjlab` and `instinct_rl`:
+
+  ```bash
+  mkdir -p <workspace_dir>
+  cd <workspace_dir>
+
+  # Option 1: HTTPS
+  git clone https://github.com/mujocolab/mjlab.git
+  git clone https://github.com/project-instinct/instinct_rl.git
+  git clone https://github.com/project-instinct/InstinctMJ.git
+
+  # Option 2: SSH
+  # git clone git@github.com:mujocolab/mjlab.git
+  # git clone git@github.com:project-instinct/instinct_rl.git
+  # git clone git@github.com:project-instinct/InstinctMJ.git
+  ```
+
+- Install the package with `uv`:
+
+  ```bash
+  cd InstinctMJ
+  uv sync
+  ```
+
+- Or install editable packages from the public repositories with `pip`:
+
+  ```bash
+  pip install -e "git+https://github.com/mujocolab/mjlab.git#egg=mjlab"
+  pip install -e "git+https://github.com/project-instinct/instinct_rl.git#egg=instinct_rl"
+  pip install -e .
+  ```
+
+- After installation, you can run the training workflow directly with `instinct_rl`-style commands:
+
+  ```bash
+  instinct-train Instinct-Locomotion-Flat-G1-v0
+  instinct-play Instinct-Locomotion-Flat-G1-Play-v0 --load-run <run_name>
+  ```
+
+## Set up IDE (Optional)
+
+If VSCode / Pylance misses local imports in a multi-repository workspace, add these paths to `.vscode/settings.json`:
+
+```json
+{
+  "python.analysis.extraPaths": [
+    "<workspace_dir>/InstinctMJ/src",
+    "<workspace_dir>/mjlab/src",
+    "<workspace_dir>/instinct_rl"
+  ]
+}
+```
+
+## Task Suite
+
+Registered task IDs:
+
+- `Instinct-Locomotion-Flat-G1-v0`
+- `Instinct-Locomotion-Flat-G1-Play-v0`
+- `Instinct-BeyondMimic-Plane-G1-v0`
+- `Instinct-BeyondMimic-Plane-G1-Play-v0`
+- `Instinct-Shadowing-WholeBody-Plane-G1-v0`
+- `Instinct-Shadowing-WholeBody-Plane-G1-Play-v0`
+- `Instinct-Perceptive-Shadowing-G1-v0`
+- `Instinct-Perceptive-Shadowing-G1-Play-v0`
+- `Instinct-Perceptive-Vae-G1-v0`
+- `Instinct-Perceptive-Vae-G1-Play-v0`
+- `Instinct-Parkour-Target-G1-v0`
+- `Instinct-Parkour-Target-G1-Play-v0`
+- `Instinct-Parkour-Target-Amp-G1-v0`
+- `Instinct-Parkour-Target-Amp-G1-Play-v0`
+
+Use the CLI to inspect the full list at any time:
+
+```bash
+instinct-list-envs
+instinct-list-envs shadowing
+```
+
+## Quick Start
+
+Train:
+
+```bash
+instinct-train Instinct-Locomotion-Flat-G1-v0
+instinct-train Instinct-Parkour-Target-G1-v0
+instinct-train Instinct-Perceptive-Shadowing-G1-v0
+```
+
+Play (`--load-run` is required):
+
+```bash
+instinct-play Instinct-Locomotion-Flat-G1-Play-v0 --load-run <run_name>
+instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name>
+instinct-play Instinct-Perceptive-Shadowing-G1-Play-v0 --load-run <run_name>
+```
+
+Play perceptive shadowing with released weights:
+
+```bash
+instinct-play Instinct-Perceptive-Shadowing-G1-Play-v0 \
+  --load-run <downloaded_run_dir> \
+  --checkpoint-file <checkpoint_file>
+```
+
+Pretrained weights:
+
+- Google Drive: [Pretrained weights](https://drive.google.com/drive/folders/1RPjbZjurknhlvlj9dxAUkARkcEyexQvF?usp=sharing)
+
+Export ONNX for parkour:
+
+```bash
+instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name> --export-onnx
+instinct-play Instinct-Parkour-Target-Amp-G1-Play-v0 --load-run <run_name> --export-onnx
+```
+
+Before training or playing AMP parkour tasks, update the local dataset root in
+`src/instinct_mj/tasks/parkour/config/g1/g1_parkour_target_amp_cfg.py`:
+
+```python
+_PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
+```
+
+If your filtered motion list is stored elsewhere, also update
+`filtered_motion_selection_filepath` in the same file. See
+`src/instinct_mj/tasks/parkour/README.md` for the task-specific notes.
+
+Module form is also available when console scripts are not on `PATH`:
+
+```bash
+python -m instinct_mj.scripts.instinct_rl.train Instinct-Locomotion-Flat-G1-v0
+python -m instinct_mj.scripts.instinct_rl.play Instinct-Locomotion-Flat-G1-Play-v0 --load-run <run_name>
+python -m instinct_mj.scripts.list_envs
+```
+
+## Code Formatting
+
+We use `pre-commit` for formatting and hygiene checks.
+
+Install `pre-commit`:
+
+```bash
+pip install pre-commit
+```
+
+Run all checks:
+
+```bash
+pre-commit run --all-files
+```
+
+Or use the local helper command:
+
+```bash
+instinct-format
+```
+
+To enable hooks on every commit:
+
+```bash
+pre-commit install
+```
+
+## Train Your Own Projects
+
+To preserve your own experiments and logs, it is usually better to create your own task package or repository and reuse the task patterns from `InstinctMJ`.
+
+If you want to add a new task directly in this repository:
+
+- Create a new folder under `src/instinct_mj/tasks/<your_project>/`.
+- Add `__init__.py` at each package level.
+- Register tasks with `register_instinct_task()`.
+- Keep the environment config and `instinct_rl` config colocated in the task package.
+
+Example registration pattern:
+
+```python
+from instinct_mj.tasks.registry import register_instinct_task
+
+from .my_env_cfg import MyEnvCfg, MyEnvCfg_PLAY
+from .rl_cfgs import my_instinct_rl_cfg
+
+register_instinct_task(
+    task_id="Instinct-My-Task-v0",
+    env_cfg_factory=MyEnvCfg,
+    play_env_cfg_factory=MyEnvCfg_PLAY,
+    instinct_rl_cfg_factory=my_instinct_rl_cfg,
+)
+```
+
+## Repository Layout
+
+- `src/instinct_mj/tasks` — task registration and family-specific configs
+- `src/instinct_mj/envs` — environment wrappers, manager extensions, and shared MDP terms
+- `src/instinct_mj/motion_reference` — motion data loaders, buffers, and reference managers
+- `src/instinct_mj/assets` — MuJoCo robot assets and resource files
+- `src/instinct_mj/scripts` — train, play, visualization, and data-processing entry points
+
+## Data and Outputs
+
+- Training logs are written to `logs/instinct_rl/<experiment_name>/<timestamp_run>/`
+- Play videos are saved under `videos/play/` in the selected run directory
+
+## Related Projects
+
+Other repositories in the Project-Instinct ecosystem:
+
+- `InstinctLab`: `https://github.com/project-instinct/InstinctLab`
+- `instinct_rl`: `https://github.com/project-instinct/instinct_rl`
