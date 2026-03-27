@@ -41,6 +41,26 @@ def track_ang_vel_z_exp(
     return torch.exp(-ang_vel_error / std**2)
 
 
+def ang_vel_z_excess_when_no_yaw_cmd(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    cmd_epsilon: float = 0.01,
+    ang_vel_tolerance: float = 0.15,
+) -> torch.Tensor:
+    """Penalize |ωz| above tolerance when yaw angular velocity command is near zero (body frame).
+
+    Returns a nonnegative penalty magnitude per env; use a negative reward weight.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    cmd = env.command_manager.get_command(command_name)
+    cmd_z_abs = torch.abs(cmd[:, 2])
+    wz_abs = torch.abs(asset.data.root_link_ang_vel_b[:, 2])
+    no_yaw_cmd = cmd_z_abs < cmd_epsilon
+    excess = torch.clamp(wz_abs - ang_vel_tolerance, min=0.0)
+    return torch.square(excess) * no_yaw_cmd.float()
+
+
 def heading_error(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
     """Compute heading command magnitude."""
     command = env.command_manager.get_command(command_name)
@@ -285,8 +305,9 @@ def feet_heading_alignment(
     command_name: str,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     cmd_threshold: float = 0.15,
+    angle_scale: float = 0.10,
 ) -> torch.Tensor:
-    """Reward foot forward axes aligning with the pelvis forward direction."""
+    """Reward foot heading alignment with an angle-sensitive exponential shaping."""
     asset: Entity = env.scene[asset_cfg.name]
     command_b = env.command_manager.get_command(command_name)
     assert command_b is not None
@@ -317,8 +338,14 @@ def feet_heading_alignment(
     )
 
     alignment = torch.sum(foot_forward_xy * desired_dir_w.unsqueeze(1), dim=-1)
-    alignment_reward = 0.5 * (alignment + 1.0)
+    cross = (
+        foot_forward_xy[..., 0] * desired_dir_w[:, None, 1]
+        - foot_forward_xy[..., 1] * desired_dir_w[:, None, 0]
+    )
+    angle_error = torch.abs(torch.atan2(cross, alignment))
+    alignment_reward = torch.exp(-angle_error / angle_scale)
     return torch.mean(alignment_reward, dim=1) * is_active.float()
+
 
 
 

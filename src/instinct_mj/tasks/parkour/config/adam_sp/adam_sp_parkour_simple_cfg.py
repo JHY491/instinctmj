@@ -167,7 +167,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     geom_names = tuple(
-        f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 5)
+        f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 9)
     )
 
     cfg.scene.sensors = (
@@ -543,6 +543,15 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             weight=2.0,
             params={"command_name": "base_velocity", "std": 0.5},
         ),
+        "ang_vel_z_excess_when_no_yaw_cmd": RewardTermCfg(
+            func=parkour_mdp.ang_vel_z_excess_when_no_yaw_cmd,
+            weight=-1.0,
+            params={
+                "command_name": "base_velocity",
+                "cmd_epsilon": 0.01,
+                "ang_vel_tolerance": 0.15,
+            },
+        ),
         "heading_error": RewardTermCfg(
             func=parkour_mdp.heading_error,
             weight=-1.0,
@@ -556,7 +565,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
-            weight=-0.3,
+            weight=-0.,
             params={"command_name": "base_velocity", "offset": 1.0},
         ),
         "volume_points_penetration": RewardTermCfg(
@@ -585,13 +594,23 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "threshold": 1.0,
             },
         ),
-        "joint_deviation_hip": RewardTermCfg(
+        # "joint_deviation_hip": RewardTermCfg(
+        #     func=parkour_mdp.joint_deviation_square,
+        #     weight=-0.5,
+        #     params={
+        #         "asset_cfg": SceneEntityCfg(
+        #             "robot",
+        #             joint_names=(".*_hip_yaw_joint", ".*_hip_roll_joint"),
+        #         )
+        #     },
+        # ),
+        "joint_deviation_ankle": RewardTermCfg(
             func=parkour_mdp.joint_deviation_square,
             weight=-0.5,
             params={
                 "asset_cfg": SceneEntityCfg(
                     "robot",
-                    joint_names=(".*_hip_yaw_joint", ".*_hip_roll_joint"),
+                    joint_names=(".*_ankle_roll_joint"),
                 )
             },
         ),
@@ -616,11 +635,11 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             weight=-1e-4,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
         ),
-        "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.05),
+        "action_rate_l2": RewardTermCfg(func=envs_mdp.action_rate_l2, weight=-0.1),
         "flat_orientation_l2": RewardTermCfg(func=envs_mdp.flat_orientation_l2, weight=-3.0),
         "torso_orientation_l2": RewardTermCfg(
             func=parkour_mdp.link_orientation,
-            weight=-3.0,
+            weight=-5.0,
             params={"asset_cfg": SceneEntityCfg("robot", body_names="torso_link")},
         ),
         "feet_flat_ori": RewardTermCfg(
@@ -795,7 +814,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             mode="reset",
             params={
                 "patch_name": "target",
-                "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)},
+                "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
                 "velocity_range": {
                     "x": (-0.2, 0.2),
                     "y": (-0.2, 0.2),
@@ -857,6 +876,17 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "operation": "abs",
                 "ranges": (0.3, 1.2),
                 "shared_random": True,  # All foot geoms share the same friction.
+            },
+        ),
+        "randomize_actuator_gains": EventTermCfg(
+            func=dr.pd_gains,
+            mode="startup",
+            params={
+                "asset_cfg": SceneEntityCfg("robot"),
+                "kp_range": (0.8, 1.2), 
+                "kd_range": (0.8, 1.2),
+                "operation": "scale",
+                "distribution": "uniform",
             },
         ),
     }

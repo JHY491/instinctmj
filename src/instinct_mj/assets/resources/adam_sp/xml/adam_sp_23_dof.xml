@@ -201,11 +201,15 @@
                     <inertial pos="0 0 0" mass="1e-09" diaginertia="0 0 0" />
                   </body>
                   <site name="left_foot_bottom" pos="0.0 0 -0.0" size="0.01" rgba="1 0 0 1" /> -->
-                  <geom name="left_foot1_collision" class="foot_capsule" fromto="-0.050 -0.04 -0.055 0.132 -0.04 -0.055"/>
-                  <geom name="left_foot2_collision" class="foot_capsule" fromto="-0.056 -0.02 -0.055 0.148 -0.02 -0.055"/>
-                  <geom name="left_foot3_collision" class="foot_capsule" fromto="-0.060  0.00 -0.055 0.158  0.00 -0.055"/>
-                  <geom name="left_foot4_collision" class="foot_capsule" fromto="-0.056  0.02 -0.055 0.148  0.02 -0.055"/>
-                  <geom name="left_foot5_collision" class="foot_capsule" fromto="-0.050  0.04 -0.055 0.132  0.04 -0.055"/>
+                  <geom name="left_foot1_collision" class="foot_capsule" fromto=" 0.08 -0.04 -0.055 0.120 -0.04 -0.055"/>
+                  <geom name="left_foot2_collision" class="foot_capsule" fromto="-0.050 -0.03 -0.055 0.142  -0.03 -0.055"/>
+                  <geom name="left_foot3_collision" class="foot_capsule" fromto="-0.056 -0.02 -0.055 0.152 -0.02 -0.055"/>
+                  <geom name="left_foot4_collision" class="foot_capsule" fromto="-0.058 -0.01 -0.055 0.155 -0.01 -0.055"/>
+                  <geom name="left_foot5_collision" class="foot_capsule" fromto="-0.060  0.00 -0.055 0.158  0.00 -0.055"/>
+                  <geom name="left_foot6_collision" class="foot_capsule" fromto="-0.058  0.01 -0.055 0.155  0.01 -0.055"/>
+                  <geom name="left_foot7_collision" class="foot_capsule" fromto="-0.056  0.02 -0.055 0.148  0.02 -0.055"/>
+                  <geom name="left_foot8_collision" class="foot_capsule" fromto="-0.050  0.03 -0.055 0.138  0.03 -0.055"/>
+                  <geom name="left_foot9_collision" class="foot_capsule" fromto=" 0.08   0.038 -0.055 0.110  0.038 -0.055"/>
                   
                 </body>
               </body>
@@ -255,11 +259,15 @@
                     <inertial pos="0 0 0" mass="1e-09" diaginertia="0 0 0" />
                   </body>
                   <site name="right_foot" pos="0.0 0 -0.0" size="0.01" rgba="1 0 0 0" /> -->
-                  <geom name="right_foot1_collision" class="foot_capsule" fromto="-0.050 -0.04 -0.055 0.132 -0.04 -0.055"/>
-                  <geom name="right_foot2_collision" class="foot_capsule" fromto="-0.056 -0.02 -0.055 0.148 -0.02 -0.055"/>
-                  <geom name="right_foot3_collision" class="foot_capsule" fromto="-0.060  0.00 -0.055 0.158  0.00 -0.055"/>
-                  <geom name="right_foot4_collision" class="foot_capsule" fromto="-0.056  0.02 -0.055 0.148  0.02 -0.055"/>
-                  <geom name="right_foot5_collision" class="foot_capsule" fromto="-0.050  0.04 -0.055 0.132  0.04 -0.055"/>
+                  <geom name="right_foot1_collision" class="foot_capsule" fromto=" 0.08 -0.038 -0.055 0.120 -0.038 -0.055"/>
+                  <geom name="right_foot2_collision" class="foot_capsule" fromto="-0.050 -0.03 -0.055 0.138  -0.03 -0.055"/>
+                  <geom name="right_foot3_collision" class="foot_capsule" fromto="-0.056 -0.02 -0.055 0.148 -0.02 -0.055"/>
+                  <geom name="right_foot4_collision" class="foot_capsule" fromto="-0.058 -0.01 -0.055 0.155 -0.01 -0.055"/>
+                  <geom name="right_foot5_collision" class="foot_capsule" fromto="-0.060  0.00 -0.055 0.158  0.00 -0.055"/>
+                  <geom name="right_foot6_collision" class="foot_capsule" fromto="-0.058  0.01 -0.055 0.155  0.01 -0.055"/>
+                  <geom name="right_foot7_collision" class="foot_capsule" fromto="-0.056  0.02 -0.055 0.152  0.02 -0.055"/>
+                  <geom name="right_foot8_collision" class="foot_capsule" fromto="-0.050  0.03 -0.055 0.142  0.03 -0.055"/>
+                  <geom name="right_foot9_collision" class="foot_capsule" fromto=" 0.08   0.04 -0.055 0.110  0.04 -0.055"/>
                 </body>
               </body>
             </body>
