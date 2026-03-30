@@ -249,7 +249,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             focal_length=1.0,
             horizontal_aperture=2 * math.tan(math.radians( 88.85) / 2.0),
             vertical_aperture=2 * math.tan(math.radians(57.74) / 2.0),
-            ray_alignment="yaw",
+            ray_alignment="base",
             offset=NoisyGroupedRayCasterCameraCfg.OffsetCfg(
                 # G1 Robot head camera nominal pose
                 pos=(
@@ -655,14 +655,15 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "feet_heading_alignment": RewardTermCfg(
             func=parkour_mdp.feet_heading_alignment,
-            weight=1.0,
+            weight=2.0,
             params={
                 "command_name": "base_velocity",
                 "asset_cfg": SceneEntityCfg(
                     "robot",
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
                 ),
-                "cmd_threshold": 0.2,
+                "cmd_threshold": 0.0,
+                "angle_scale": 0.05,
             },
         ),
         "feet_at_plane": RewardTermCfg(
