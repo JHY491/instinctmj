@@ -50,7 +50,15 @@ class PolicyCfg(InstinctRlEncoderActorCriticCfg):
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
     )
 
-
+@dataclass(kw_only=True)
+class MoEPolicyCfg(InstinctRlEncoderMoEActorCriticCfg):
+    init_noise_std: float = 1.0
+    num_moe_experts: int = 4
+    actor_hidden_dims: list = field(default_factory=lambda: [256, 128, 64])
+    critic_hidden_dims: list = field(default_factory=lambda: [256, 128, 64])
+    activation: str = "elu"
+    encoder_configs: object = field(default_factory=lambda: EncoderConfigs())
+    critic_encoder_configs: object = field(default_factory=lambda: EncoderConfigs())
 
 @dataclass(kw_only=True)
 class AmpAlgoCfg(InstinctRlPpoAlgorithmCfg):
@@ -102,7 +110,7 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     resume: bool = False
     load_run: str = "^(?!_play$).*"
     empirical_normalization: bool = False
-    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: PolicyCfg())
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: MoEPolicyCfg())
     algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: AmpAlgoCfg())
     normalizers: dict[str, InstinctRlNormalizerCfg] = field(default_factory=lambda: default_policy_critic_normalizers())
 

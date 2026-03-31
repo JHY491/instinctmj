@@ -328,6 +328,42 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     curriculum=True,
     add_lights=True,
     sub_terrains={
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
+                ),
+            },
+        ),
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
+                ),
+            },
+        ),
         "pyramid_stairs": PerlinPyramidStairsTerrainCfg(
             proportion=0.,
             step_height_range=(0.05, 0.20),
@@ -383,7 +419,7 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             },
         ),
         "one_sided_stairs": PerlinOneSidedStairsTerrainCfg(
-            proportion=1.0,
+            proportion=0.8,
             step_height_range=(0.05, 0.20),
             step_width=0.3,
             platform_width=1.5,

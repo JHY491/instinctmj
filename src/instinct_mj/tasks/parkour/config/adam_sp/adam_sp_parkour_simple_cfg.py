@@ -141,8 +141,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     cfg.sim.mujoco.ls_iterations = 20
     cfg.sim.mujoco.ccd_iterations = 128
     cfg.sim.mujoco.multiccd = False
-    # cfg.sim.contact_sensor_maxmatch = 500
-    # cfg.sim.nconmax = 65
+
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
     edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
@@ -298,15 +297,15 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             heading_control_stiffness=2.0,
             rel_standing_envs=0.05,
             ranges=PoseVelocityCommandCfg.Ranges(
-                lin_vel_x=(0.0, 1.0),
+                lin_vel_x=(0.0, 0.0),
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
-            random_velocity_terrain=[],
+            random_velocity_terrain=["perlin_rough_stand",],
             velocity_ranges={
-                # "pyramid_stairs": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                # "pyramid_stairs_inv": {"lin_vel_x": (0., 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "one_sided_stairs": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (0.0, 0.0)},
+                "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "one_sided_stairs": {"lin_vel_x": (0.3, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
