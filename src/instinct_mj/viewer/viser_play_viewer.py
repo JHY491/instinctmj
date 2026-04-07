@@ -66,11 +66,13 @@ class InstinctViserPlayViewer(ViserPlayViewer):
     """Viser play viewer with Camera Feeds for ray caster cameras (e.g. Parkour depth)."""
 
     _ray_caster_feeds: list[tuple[str, GroupedRayCasterCamera, _RayCasterFeed]]
+    _command_readout_html: viser.GuiHtmlHandle | None
 
     @override
     def setup(self) -> None:
         super().setup()
         self._ray_caster_feeds = []
+        self._command_readout_html = None
         env = self.env.unwrapped
         sensors = _get_ray_caster_camera_sensors(env)
         if not sensors:
@@ -106,9 +108,38 @@ class InstinctViserPlayViewer(ViserPlayViewer):
                 )
                 self._ray_caster_feeds.append((name, sensor, _RayCasterFeed(key, handle, depth_scale)))
 
+        # Numeric command readout (PoseVelocityCommand has no create_gui sliders unlike mjlab VelocityCommand).
+        env = self.env.unwrapped
+        cm = getattr(env, "command_manager", None)
+        if cm is not None and len(getattr(cm, "active_terms", []) or []) > 0:
+            with self._server.gui.add_folder("Command readout"):
+                self._command_readout_html = self._server.gui.add_html(
+                    '<div style="font-size:0.85em;line-height:1.35;">(no command yet)</div>'
+                )
+
     @override
     def sync_env_to_viewer(self) -> None:
         super().sync_env_to_viewer()
+        if self._command_readout_html is not None:
+            env = self.env.unwrapped
+            cm = getattr(env, "command_manager", None)
+            if cm is not None:
+                idx = int(self._scene.env_idx)
+                parts: list[str] = []
+                for term_name, values in cm.get_active_iterable_terms(idx):
+                    if len(values) >= 3:
+                        vx, vy, wz = values[0], values[1], values[2]
+                        parts.append(
+                            f"<strong>{term_name}</strong><br/>"
+                            f"&nbsp;&nbsp;v<sub>x</sub>={vx:.3f} &nbsp; v<sub>y</sub>={vy:.3f} &nbsp; "
+                            f"ω<sub>z</sub>={wz:.3f} <span style='color:#666;'>(body)</span>"
+                        )
+                    else:
+                        parts.append(f"<strong>{term_name}</strong>: {values}")
+                body = "<br/><br/>".join(parts) if parts else "—"
+                self._command_readout_html.content = (
+                    f'<div style="font-size:0.85em;line-height:1.35;">{body}</div>'
+                )
         if not self._ray_caster_feeds:
             return
         env_idx = self._scene.env_idx
@@ -132,6 +163,12 @@ class InstinctViserPlayViewer(ViserPlayViewer):
 
     @override
     def close(self) -> None:
+        if self._command_readout_html is not None:
+            try:
+                self._command_readout_html.remove()
+            except Exception:
+                pass
+            self._command_readout_html = None
         for _name, _sensor, feed in self._ray_caster_feeds:
             try:
                 feed.handle.remove()
