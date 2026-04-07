@@ -84,7 +84,7 @@ class InstinctRlEnv(ManagerBasedRlEnv):
     def load_managers(self) -> None:
         # Route Instinct tasks through MultiRewardManager so reward logging matches
         # InstinctLab conventions:
-        #   Episode_Reward/rewards_<term>/{max_episode_len_s,sum,timestep}
+        #   Episode_Reward/rewards_<term>/max_episode_len_s
         reward_group_cfg = self._as_multi_reward_cfg(self.cfg.rewards)
         if reward_group_cfg is not None:
             self.cfg.rewards = {}
