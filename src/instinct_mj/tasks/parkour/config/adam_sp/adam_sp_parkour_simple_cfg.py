@@ -299,7 +299,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             ranges=PoseVelocityCommandCfg.Ranges(
                 lin_vel_x=(0.0, 0.0),
                 lin_vel_y=(0.0, 0.0),
-                ang_vel_z=(-1.0, 1.0),
+                ang_vel_z=(-0.5, 0.5),
             ),
             random_velocity_terrain=["perlin_rough_stand",],
             velocity_ranges={
@@ -548,7 +548,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             params={
                 "command_name": "base_velocity",
                 "cmd_epsilon": 0.01,
-                "ang_vel_tolerance": 0.15,
+                "ang_vel_tolerance": 0.10,
             },
         ),
         "heading_error": RewardTermCfg(
@@ -564,8 +564,8 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
-            weight=-0.,
-            params={"command_name": "base_velocity", "offset": 1.0},
+            weight=-0.5,
+            params={"command_name": "base_velocity", "offset": 4.0},
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
@@ -583,7 +583,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "feet_slide": RewardTermCfg(
             func=parkour_mdp.feet_slide,
-            weight=-0.4,
+            weight=-1.0,
             params={
                 "sensor_name": "contact_forces",
                 "asset_cfg": SceneEntityCfg(

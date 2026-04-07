@@ -110,7 +110,7 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     resume: bool = False
     load_run: str = "^(?!_play$).*"
     empirical_normalization: bool = False
-    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: MoEPolicyCfg())
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: PolicyCfg())
     algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: AmpAlgoCfg())
     normalizers: dict[str, InstinctRlNormalizerCfg] = field(default_factory=lambda: default_policy_critic_normalizers())
 

@@ -1,3 +1,7 @@
 selected_files:
 - stair_retargeted.npz
 - walk_retargeted.npz
+motion_weights:
+- 4.0
+- 1.0
+
