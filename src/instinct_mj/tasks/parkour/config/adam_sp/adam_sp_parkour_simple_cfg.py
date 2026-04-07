@@ -30,7 +30,6 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
-import mjlab.tasks.velocity.mdp as velocity_mdp
 from instinct_mj.assets.adam_sp import (
     ADAM_SP_MJCF_PATH,
     adam_sp_symmetric_augmentation_joint_mapping,
@@ -299,7 +298,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             ranges=PoseVelocityCommandCfg.Ranges(
                 lin_vel_x=(0.0, 0.0),
                 lin_vel_y=(0.0, 0.0),
-                ang_vel_z=(-0.5, 0.5),
+                ang_vel_z=(-1.0, 1.0),
             ),
             random_velocity_terrain=["perlin_rough_stand",],
             velocity_ranges={
@@ -548,7 +547,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             params={
                 "command_name": "base_velocity",
                 "cmd_epsilon": 0.01,
-                "ang_vel_tolerance": 0.10,
+                "ang_vel_tolerance": 0.15,
             },
         ),
         "heading_error": RewardTermCfg(
@@ -564,8 +563,8 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
-            weight=-0.5,
-            params={"command_name": "base_velocity", "offset": 4.0},
+            weight=-0.,
+            params={"command_name": "base_velocity", "offset": 1.0},
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
@@ -583,7 +582,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
         "feet_slide": RewardTermCfg(
             func=parkour_mdp.feet_slide,
-            weight=-1.0,
+            weight=-0.4,
             params={
                 "sensor_name": "contact_forces",
                 "asset_cfg": SceneEntityCfg(
@@ -752,6 +751,84 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
     }
     cfg.curriculum = {
+        "command_vel": CurriculumTermCfg(
+            func=parkour_mdp.adaptive_commands_vel_by_tracking,
+            params={
+                "command_name": "base_velocity",
+                "lin_vel_threshold": (0.45, 0.7),
+                "ang_vel_threshold": (0.35, 0.6),
+                "smoothing": 0.2,
+                "init_stage": 0,
+                "velocity_stages": [
+                    {
+                        "lin_vel_x": (0.0, 0.0),
+                        "lin_vel_y": (0.0, 0.0),
+                        "ang_vel_z": (-0.5, 0.5),
+                        "velocity_ranges": {
+                            "perlin_rough_stand": {
+                                "lin_vel_x": (0.0, 0.0),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (0.0, 0.0),
+                            },
+                            "perlin_rough": {
+                                "lin_vel_x": (0.2, 0.6),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-0.5, 0.5),
+                            },
+                            "one_sided_stairs": {
+                                "lin_vel_x": (0.2, 0.5),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-0.5, 0.5),
+                            },
+                        },
+                    },
+                    {
+                        "lin_vel_x": (0.0, 0.0),
+                        "lin_vel_y": (0.0, 0.0),
+                        "ang_vel_z": (-0.75, 0.75),
+                        "velocity_ranges": {
+                            "perlin_rough_stand": {
+                                "lin_vel_x": (0.0, 0.0),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (0.0, 0.0),
+                            },
+                            "perlin_rough": {
+                                "lin_vel_x": (0.25, 0.8),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-0.75, 0.75),
+                            },
+                            "one_sided_stairs": {
+                                "lin_vel_x": (0.25, 0.65),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-0.75, 0.75),
+                            },
+                        },
+                    },
+                    {
+                        "lin_vel_x": (0.0, 0.0),
+                        "lin_vel_y": (0.0, 0.0),
+                        "ang_vel_z": (-1.0, 1.0),
+                        "velocity_ranges": {
+                            "perlin_rough_stand": {
+                                "lin_vel_x": (0.0, 0.0),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (0.0, 0.0),
+                            },
+                            "perlin_rough": {
+                                "lin_vel_x": (0.3, 1.0),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-1.0, 1.0),
+                            },
+                            "one_sided_stairs": {
+                                "lin_vel_x": (0.3, 0.8),
+                                "lin_vel_y": (0.0, 0.0),
+                                "ang_vel_z": (-1.0, 1.0),
+                            },
+                        },
+                    },
+                ],
+            },
+        ),
         "terrain_levels": CurriculumTermCfg(
             func=parkour_mdp.tracking_exp_vel,
             params={
@@ -910,6 +987,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 sensor_cfg.debug_vis = True
         cfg.scene.terrain.collision_debug_vis = True
         cfg.commands["base_velocity"].debug_vis = True
+        cfg.curriculum.pop("command_vel", None)
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
         cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
