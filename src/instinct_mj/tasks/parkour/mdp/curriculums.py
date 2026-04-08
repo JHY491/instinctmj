@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, TypedDict, cast
 
@@ -103,13 +104,44 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
     def __init__(self, cfg: CurriculumTermCfg, env: ManagerBasedRlEnv):
         super().__init__(env)
         self.command_name = cfg.params.get("command_name", "base_velocity")
-        self.velocity_stages: list[PoseVelocityStage] = cfg.params["velocity_stages"]
-        self.current_stage = min(cfg.params.get("init_stage", 0), len(self.velocity_stages) - 1)
         self.delayed_lin_tracking = float(cfg.params.get("init_lin_tracking", 0.0))
         self.delayed_ang_tracking = float(cfg.params.get("init_ang_tracking", 0.0))
         self._command_term = cast("PoseVelocityCommand", env.command_manager.get_term(self.command_name))
         self._command_cfg = cast("PoseVelocityCommandCfg", self._command_term.cfg)
-        _apply_velocity_stage(self._command_term, self._command_cfg, self.velocity_stages[self.current_stage])
+        self._base_ranges = {
+            "lin_vel_x": self._command_cfg.ranges.lin_vel_x,
+            "lin_vel_y": self._command_cfg.ranges.lin_vel_y,
+            "ang_vel_z": self._command_cfg.ranges.ang_vel_z,
+        }
+        default_stage: PoseVelocityStage = {
+            "lin_vel_x": cfg.params.get("default_lin_vel_x", self._base_ranges["lin_vel_x"]),
+            "lin_vel_y": cfg.params.get("default_lin_vel_y", self._base_ranges["lin_vel_y"]),
+            "ang_vel_z": cfg.params.get("default_ang_vel_z", self._base_ranges["ang_vel_z"]),
+        }
+        self._base_velocity_ranges = (
+            copy.deepcopy(self._command_cfg.velocity_ranges) if self._command_cfg.velocity_ranges is not None else None
+        )
+
+        self.lin_velocity_stages = cast(
+            list[PoseVelocityStage],
+            cfg.params.get("lin_velocity_stages", cfg.params.get("velocity_stages", [])),
+        )
+        if not self.lin_velocity_stages:
+            self.lin_velocity_stages = [copy.deepcopy(default_stage)]
+
+        self.ang_velocity_stages = cast(list[PoseVelocityStage], cfg.params.get("ang_velocity_stages", []))
+        if not self.ang_velocity_stages:
+            self.ang_velocity_stages = [{"ang_vel_z": self._base_ranges["ang_vel_z"]}]
+
+        self.current_lin_stage = min(cfg.params.get("init_lin_stage", cfg.params.get("init_stage", 0)), len(self.lin_velocity_stages) - 1)
+        self.current_ang_stage = min(cfg.params.get("init_ang_stage", cfg.params.get("init_stage", 0)), len(self.ang_velocity_stages) - 1)
+        effective_stage = _compose_velocity_stage(
+            self._base_ranges,
+            self._base_velocity_ranges,
+            self.lin_velocity_stages[self.current_lin_stage],
+            self.ang_velocity_stages[self.current_ang_stage],
+        )
+        _apply_velocity_stage(self._command_term, self._command_cfg, effective_stage)
 
     def __call__(
         self,
@@ -117,17 +149,27 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
         env_ids: Sequence[int],
         command_name: str = "base_velocity",
         velocity_stages: list[PoseVelocityStage] | None = None,
+        lin_velocity_stages: list[PoseVelocityStage] | None = None,
+        ang_velocity_stages: list[PoseVelocityStage] | None = None,
         lin_vel_threshold: tuple[float, float] = (0.45, 0.7),
         ang_vel_threshold: tuple[float, float] = (0.35, 0.6),
         smoothing: float = 0.2,
         min_envs: int = 1,
+        allow_lin_stage_regression: bool = True,
+        allow_ang_stage_regression: bool = True,
         init_stage: int = 0,
+        init_lin_stage: int = 0,
+        init_ang_stage: int = 0,
         init_lin_tracking: float = 0.0,
         init_ang_tracking: float = 0.0,
     ) -> dict[str, torch.Tensor]:
-        del command_name, init_stage, init_lin_tracking, init_ang_tracking  # Stored during initialization.
-        if velocity_stages is not None:
-            self.velocity_stages = velocity_stages
+        del command_name, init_stage, init_lin_stage, init_ang_stage, init_lin_tracking, init_ang_tracking  # Stored during initialization.
+        if lin_velocity_stages is not None:
+            self.lin_velocity_stages = lin_velocity_stages
+        elif velocity_stages is not None:
+            self.lin_velocity_stages = velocity_stages
+        if ang_velocity_stages is not None:
+            self.ang_velocity_stages = ang_velocity_stages
 
         if len(env_ids) >= min_envs:
             tracking_exp_vel_xy = self._command_term.metrics["tracking_exp_vel_xy"][env_ids]
@@ -137,22 +179,31 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
             self.delayed_lin_tracking = (1.0 - smoothing) * self.delayed_lin_tracking + smoothing * current_lin_tracking
             self.delayed_ang_tracking = (1.0 - smoothing) * self.delayed_ang_tracking + smoothing * current_ang_tracking
 
-            move_up = (
-                self.delayed_lin_tracking > lin_vel_threshold[1]
-                and self.delayed_ang_tracking > ang_vel_threshold[1]
-            )
-            move_down = (
-                self.delayed_lin_tracking < lin_vel_threshold[0]
-                or self.delayed_ang_tracking < ang_vel_threshold[0]
-            )
-            if move_up and self.current_stage < len(self.velocity_stages) - 1:
-                self.current_stage += 1
-            elif move_down and self.current_stage > 0:
-                self.current_stage -= 1
+            lin_move_up = self.delayed_lin_tracking > lin_vel_threshold[1]
+            lin_move_down = self.delayed_lin_tracking < lin_vel_threshold[0]
+            if lin_move_up and self.current_lin_stage < len(self.lin_velocity_stages) - 1:
+                self.current_lin_stage += 1
+            elif allow_lin_stage_regression and lin_move_down and self.current_lin_stage > 0:
+                self.current_lin_stage -= 1
 
-        _apply_velocity_stage(self._command_term, self._command_cfg, self.velocity_stages[self.current_stage])
-        return {
-            "stage_index": torch.tensor(float(self.current_stage)),
+            ang_move_up = self.delayed_ang_tracking > ang_vel_threshold[1]
+            ang_move_down = self.delayed_ang_tracking < ang_vel_threshold[0]
+            if ang_move_up and self.current_ang_stage < len(self.ang_velocity_stages) - 1:
+                self.current_ang_stage += 1
+            elif allow_ang_stage_regression and ang_move_down and self.current_ang_stage > 0:
+                self.current_ang_stage -= 1
+
+        effective_stage = _compose_velocity_stage(
+            self._base_ranges,
+            self._base_velocity_ranges,
+            self.lin_velocity_stages[self.current_lin_stage],
+            self.ang_velocity_stages[self.current_ang_stage],
+        )
+        _apply_velocity_stage(self._command_term, self._command_cfg, effective_stage)
+        metrics = {
+            "stage_index": torch.tensor(float(self.current_lin_stage)),
+            "lin_stage_index": torch.tensor(float(self.current_lin_stage)),
+            "ang_stage_index": torch.tensor(float(self.current_ang_stage)),
             "tracking_lin": torch.tensor(self.delayed_lin_tracking),
             "tracking_ang": torch.tensor(self.delayed_ang_tracking),
             "lin_vel_x_min": torch.tensor(self._command_cfg.ranges.lin_vel_x[0]),
@@ -162,6 +213,42 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
             "ang_vel_z_min": torch.tensor(self._command_cfg.ranges.ang_vel_z[0]),
             "ang_vel_z_max": torch.tensor(self._command_cfg.ranges.ang_vel_z[1]),
         }
+        if self._command_cfg.velocity_ranges is not None:
+            for terrain_name, terrain_ranges in self._command_cfg.velocity_ranges.items():
+                sanitized_name = terrain_name.replace("-", "_")
+                metrics[f"{sanitized_name}_lin_vel_x_max"] = torch.tensor(terrain_ranges["lin_vel_x"][1])
+                metrics[f"{sanitized_name}_ang_vel_z_max"] = torch.tensor(terrain_ranges["ang_vel_z"][1])
+        return metrics
+
+
+def _compose_velocity_stage(
+    base_ranges: dict[str, tuple[float, float]],
+    base_velocity_ranges: dict[str, dict[str, tuple[float, float]]] | None,
+    *stages: PoseVelocityStage,
+) -> PoseVelocityStage:
+    effective_stage: PoseVelocityStage = {
+        "lin_vel_x": base_ranges["lin_vel_x"],
+        "lin_vel_y": base_ranges["lin_vel_y"],
+        "ang_vel_z": base_ranges["ang_vel_z"],
+    }
+    if base_velocity_ranges is not None:
+        effective_stage["velocity_ranges"] = copy.deepcopy(base_velocity_ranges)
+
+    for stage in stages:
+        if "lin_vel_x" in stage:
+            effective_stage["lin_vel_x"] = stage["lin_vel_x"]
+        if "lin_vel_y" in stage:
+            effective_stage["lin_vel_y"] = stage["lin_vel_y"]
+        if "ang_vel_z" in stage:
+            effective_stage["ang_vel_z"] = stage["ang_vel_z"]
+        if "velocity_ranges" in stage:
+            if "velocity_ranges" not in effective_stage:
+                effective_stage["velocity_ranges"] = {}
+            for terrain_name, terrain_ranges in stage["velocity_ranges"].items():
+                if terrain_name not in effective_stage["velocity_ranges"]:
+                    effective_stage["velocity_ranges"][terrain_name] = {}
+                effective_stage["velocity_ranges"][terrain_name].update(terrain_ranges)
+    return effective_stage
 
 
 def _apply_velocity_stage(
@@ -182,8 +269,8 @@ def _apply_velocity_stage(
         command_term.random_ang_vel_z_range[:, 0] = stage["ang_vel_z"][0]
         command_term.random_ang_vel_z_range[:, 1] = stage["ang_vel_z"][1]
 
-    if "velocity_ranges" in stage and cfg.velocity_ranges is not None:
-        cfg.velocity_ranges.update(stage["velocity_ranges"])
+    if "velocity_ranges" in stage and stage["velocity_ranges"] is not None:
+        cfg.velocity_ranges = copy.deepcopy(stage["velocity_ranges"])
         _update_velocity_ranges_by_terrain(command_term, cfg.velocity_ranges)
 
 

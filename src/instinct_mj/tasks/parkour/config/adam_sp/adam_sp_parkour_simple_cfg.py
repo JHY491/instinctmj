@@ -298,13 +298,13 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             ranges=PoseVelocityCommandCfg.Ranges(
                 lin_vel_x=(0.0, 0.0),
                 lin_vel_y=(0.0, 0.0),
-                ang_vel_z=(-1.0, 1.0),
+                ang_vel_z=(-0.5, 0.5),
             ),
             random_velocity_terrain=["perlin_rough_stand",],
             velocity_ranges={
                 "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (0.0, 0.0)},
-                "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "one_sided_stairs": {"lin_vel_x": (0.3, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
+                "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
+                "one_sided_stairs": {"lin_vel_x": (0.3, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -756,73 +756,61 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             params={
                 "command_name": "base_velocity",
                 "lin_vel_threshold": (0.65, 0.8),
-                "ang_vel_threshold": (0.5, 0.7),
                 "smoothing": 0.2,
-                "init_stage": 0,
-                "velocity_stages": [
+                "allow_lin_stage_regression": False,
+                "init_lin_stage": 0,
+                "lin_velocity_stages": [
                     {
                         "lin_vel_x": (0.0, 0.0),
                         "lin_vel_y": (0.0, 0.0),
-                        "ang_vel_z": (-0.5, 0.5),
                         "velocity_ranges": {
                             "perlin_rough_stand": {
                                 "lin_vel_x": (0.0, 0.0),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (0.0, 0.0),
                             },
                             "perlin_rough": {
                                 "lin_vel_x": (0.3, 1.0),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                             "one_sided_stairs": {
                                 "lin_vel_x": (0.3, 0.8),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                         },
                     },
                     {
                         "lin_vel_x": (0.0, 0.0),
                         "lin_vel_y": (0.0, 0.0),
-                        "ang_vel_z": (-0.5, 0.5),
                         "velocity_ranges": {
                             "perlin_rough_stand": {
                                 "lin_vel_x": (0.0, 0.0),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (0.0, 0.0),
                             },
                             "perlin_rough": {
                                 "lin_vel_x": (0.3, 1.5),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                             "one_sided_stairs": {
                                 "lin_vel_x": (0.3, 1.2),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                         },
                     },
                     {
                         "lin_vel_x": (0.0, 0.0),
                         "lin_vel_y": (0.0, 0.0),
-                        "ang_vel_z": (-0.5, 0.5),
                         "velocity_ranges": {
                             "perlin_rough_stand": {
                                 "lin_vel_x": (0.0, 0.0),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (0.0, 0.0),
                             },
                             "perlin_rough": {
                                 "lin_vel_x": (0.5, 2.0),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                             "one_sided_stairs": {
                                 "lin_vel_x": (0.5, 1.6),
                                 "lin_vel_y": (0.0, 0.0),
-                                "ang_vel_z": (-0.5, 0.5),
                             },
                         },
                     },
