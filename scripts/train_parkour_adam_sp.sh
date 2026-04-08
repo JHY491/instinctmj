@@ -111,7 +111,7 @@ LOG_FILE="${LOG_DIR}/train_parkour_adam_sp_${TIMESTAMP}.log"
 filter_output() {
   # MuJoCo 刷屏；多卡时 torchrunx 会给行前加 INFO:torchrunx.<host>:，用行内匹配一并滤掉。
   grep --line-buffered -vE \
-    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|^contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+$|^height field collision overflow.*$|^[[:space:]]*decrease the number of hfield rows/cols or modify size of colliding geom[[:space:]]*$"
+    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+|height field collision overflow|^[[:space:]]*decrease the number of hfield rows/cols or modify size of colliding geom[[:space:]]*$"
 }
 
 if [[ "$BACKGROUND" == true ]]; then
