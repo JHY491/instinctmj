@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import torch
 from mjlab.managers.manager_base import ManagerTermBase
@@ -99,13 +99,18 @@ def commands_vel(
 
 
 class adaptive_commands_vel_by_tracking(ManagerTermBase):
-    """Adapt command velocity ranges based on delayed tracking performance."""
+    """Adapt command velocity ranges from linear velocity tracking only.
+
+    Angular velocity limits follow the command config (``ranges`` / per-terrain
+    ``velocity_ranges``) and are not advanced or regressed by this term. Linear
+    stages only move up when delayed XY tracking exceeds the upper threshold;
+    they never move down once increased.
+    """
 
     def __init__(self, cfg: CurriculumTermCfg, env: ManagerBasedRlEnv):
         super().__init__(env)
         self.command_name = cfg.params.get("command_name", "base_velocity")
         self.delayed_lin_tracking = float(cfg.params.get("init_lin_tracking", 0.0))
-        self.delayed_ang_tracking = float(cfg.params.get("init_ang_tracking", 0.0))
         self._command_term = cast("PoseVelocityCommand", env.command_manager.get_term(self.command_name))
         self._command_cfg = cast("PoseVelocityCommandCfg", self._command_term.cfg)
         self._base_ranges = {
@@ -129,17 +134,11 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
         if not self.lin_velocity_stages:
             self.lin_velocity_stages = [copy.deepcopy(default_stage)]
 
-        self.ang_velocity_stages = cast(list[PoseVelocityStage], cfg.params.get("ang_velocity_stages", []))
-        if not self.ang_velocity_stages:
-            self.ang_velocity_stages = [{"ang_vel_z": self._base_ranges["ang_vel_z"]}]
-
         self.current_lin_stage = min(cfg.params.get("init_lin_stage", cfg.params.get("init_stage", 0)), len(self.lin_velocity_stages) - 1)
-        self.current_ang_stage = min(cfg.params.get("init_ang_stage", cfg.params.get("init_stage", 0)), len(self.ang_velocity_stages) - 1)
         effective_stage = _compose_velocity_stage(
             self._base_ranges,
             self._base_velocity_ranges,
             self.lin_velocity_stages[self.current_lin_stage],
-            self.ang_velocity_stages[self.current_ang_stage],
         )
         _apply_velocity_stage(self._command_term, self._command_cfg, effective_stage)
 
@@ -150,62 +149,39 @@ class adaptive_commands_vel_by_tracking(ManagerTermBase):
         command_name: str = "base_velocity",
         velocity_stages: list[PoseVelocityStage] | None = None,
         lin_velocity_stages: list[PoseVelocityStage] | None = None,
-        ang_velocity_stages: list[PoseVelocityStage] | None = None,
         lin_vel_threshold: tuple[float, float] = (0.45, 0.7),
-        ang_vel_threshold: tuple[float, float] = (0.35, 0.6),
         smoothing: float = 0.2,
         min_envs: int = 1,
-        allow_lin_stage_regression: bool = True,
-        allow_ang_stage_regression: bool = True,
         init_stage: int = 0,
         init_lin_stage: int = 0,
-        init_ang_stage: int = 0,
         init_lin_tracking: float = 0.0,
-        init_ang_tracking: float = 0.0,
+        **_: Any,
     ) -> dict[str, torch.Tensor]:
-        del command_name, init_stage, init_lin_stage, init_ang_stage, init_lin_tracking, init_ang_tracking  # Stored during initialization.
+        del command_name, init_stage, init_lin_stage, init_lin_tracking  # Stored during initialization or ignored.
         if lin_velocity_stages is not None:
             self.lin_velocity_stages = lin_velocity_stages
         elif velocity_stages is not None:
             self.lin_velocity_stages = velocity_stages
-        if ang_velocity_stages is not None:
-            self.ang_velocity_stages = ang_velocity_stages
 
         if len(env_ids) >= min_envs:
             tracking_exp_vel_xy = self._command_term.metrics["tracking_exp_vel_xy"][env_ids]
-            tracking_exp_vel_yaw = self._command_term.metrics["tracking_exp_vel_yaw"][env_ids]
             current_lin_tracking = float(tracking_exp_vel_xy.mean())
-            current_ang_tracking = float(tracking_exp_vel_yaw.mean())
             self.delayed_lin_tracking = (1.0 - smoothing) * self.delayed_lin_tracking + smoothing * current_lin_tracking
-            self.delayed_ang_tracking = (1.0 - smoothing) * self.delayed_ang_tracking + smoothing * current_ang_tracking
 
             lin_move_up = self.delayed_lin_tracking > lin_vel_threshold[1]
-            lin_move_down = self.delayed_lin_tracking < lin_vel_threshold[0]
             if lin_move_up and self.current_lin_stage < len(self.lin_velocity_stages) - 1:
                 self.current_lin_stage += 1
-            elif allow_lin_stage_regression and lin_move_down and self.current_lin_stage > 0:
-                self.current_lin_stage -= 1
-
-            ang_move_up = self.delayed_ang_tracking > ang_vel_threshold[1]
-            ang_move_down = self.delayed_ang_tracking < ang_vel_threshold[0]
-            if ang_move_up and self.current_ang_stage < len(self.ang_velocity_stages) - 1:
-                self.current_ang_stage += 1
-            elif allow_ang_stage_regression and ang_move_down and self.current_ang_stage > 0:
-                self.current_ang_stage -= 1
 
         effective_stage = _compose_velocity_stage(
             self._base_ranges,
             self._base_velocity_ranges,
             self.lin_velocity_stages[self.current_lin_stage],
-            self.ang_velocity_stages[self.current_ang_stage],
         )
         _apply_velocity_stage(self._command_term, self._command_cfg, effective_stage)
         metrics = {
             "stage_index": torch.tensor(float(self.current_lin_stage)),
             "lin_stage_index": torch.tensor(float(self.current_lin_stage)),
-            "ang_stage_index": torch.tensor(float(self.current_ang_stage)),
             "tracking_lin": torch.tensor(self.delayed_lin_tracking),
-            "tracking_ang": torch.tensor(self.delayed_ang_tracking),
             "lin_vel_x_min": torch.tensor(self._command_cfg.ranges.lin_vel_x[0]),
             "lin_vel_x_max": torch.tensor(self._command_cfg.ranges.lin_vel_x[1]),
             "lin_vel_y_min": torch.tensor(self._command_cfg.ranges.lin_vel_y[0]),

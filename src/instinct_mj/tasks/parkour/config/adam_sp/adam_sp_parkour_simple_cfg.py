@@ -757,7 +757,6 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 "command_name": "base_velocity",
                 "lin_vel_threshold": (0.65, 0.8),
                 "smoothing": 0.2,
-                "allow_lin_stage_regression": False,
                 "init_lin_stage": 0,
                 "lin_velocity_stages": [
                     {
