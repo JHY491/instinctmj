@@ -115,7 +115,7 @@ motion_reference_cfg = MotionReferenceManagerCfg(
     update_period=0.02,
     num_frames=10,
     motion_buffers={"run_walk": AmassMotionCfg()},
-    mp_split_method="Even",
+    mp_split_method="None",
 )
 
 

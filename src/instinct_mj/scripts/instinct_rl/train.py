@@ -245,6 +245,45 @@ def _parse_cuda_device_index(device: str) -> int:
         return 0
 
 
+def _parse_visible_cuda_devices_env() -> list[int] | None:
+    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if raw is None:
+        return None
+    return [int(token.strip()) for token in raw.split(",") if token.strip()]
+
+
+def _configure_cpu_thread_env(force_single_thread: bool = False) -> None:
+    # Avoid BLAS/OpenMP oversubscription when torchrunx spawns one worker per GPU.
+    thread_env_defaults = {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+    }
+    for env_name, env_value in thread_env_defaults.items():
+        if force_single_thread:
+            os.environ[env_name] = env_value
+        else:
+            os.environ.setdefault(env_name, env_value)
+
+
+def _bind_cuda_runtime_device(device: str) -> None:
+    if not device.startswith("cuda"):
+        return
+    device_index = _parse_cuda_device_index(device)
+    torch.cuda.set_device(device_index)
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(device_index)
+    try:
+        import warp as wp
+
+        if not wp.is_initialized():
+            wp.config.quiet = True
+            wp.init()
+        wp.set_device(device)
+    except Exception:
+        pass
+
+
 def _enforce_world_free_camera(viewer: NativeMujocoViewer) -> None:
     cfg = getattr(viewer, "cfg", None)
     if cfg is None or not hasattr(cfg, "OriginType"):
@@ -277,6 +316,7 @@ def _resolve_distributed_runtime(
 
 def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     log_dir = log_dir.expanduser().resolve()
+    _configure_cpu_thread_env(force_single_thread=int(os.environ.get("WORLD_SIZE", "1")) > 1)
 
     if InstinctRlVecEnvWrapper is None:
         raise ImportError(
@@ -287,7 +327,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     device, seed, rank, world_size, is_distributed = _resolve_distributed_runtime(cfg)
 
     if device.startswith("cuda"):
-        os.environ["MUJOCO_EGL_DEVICE_ID"] = str(_parse_cuda_device_index(device))
+        _bind_cuda_runtime_device(device)
 
     viewer_enabled = cfg.viewer == "native" and rank == 0
     video_enabled = cfg.video and rank == 0
@@ -327,6 +367,11 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
         f"[INFO] Task={task_id}, device={device}, seed={seed}, "
         f"num_envs={cfg.env.scene.num_envs}, rank={rank}/{world_size}"
     )
+    if device.startswith("cuda"):
+        print(
+            f"[INFO] CUDA bind: rank={rank}/{world_size}, train_device='{device}', "
+            f"torch.cuda.current_device()={torch.cuda.current_device()}"
+        )
     if rank == 0:
         print(f"[INFO] Logging to: {log_dir}")
 
@@ -355,9 +400,9 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     train_viewer = None
     if viewer_enabled:
 
-        def _viewer_policy(_obs: torch.Tensor) -> torch.Tensor:
+        def _viewer_policy(obs: torch.Tensor) -> torch.Tensor:
             return torch.zeros(
-                (vec_env.num_envs, vec_env.num_actions),
+                (obs.shape[0], vec_env.num_actions),
                 device=vec_env.device,
             )
 
@@ -457,17 +502,27 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
 def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
     args = args or TrainConfig.from_task(task_id)
+    _configure_cpu_thread_env()
     log_root_path = Path("logs") / "instinct_rl" / args.agent.experiment_name
     log_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if args.agent.run_name:
         log_dir_name += f"_{args.agent.run_name}"
     log_dir = log_root_path / log_dir_name
 
-    if args.gpu_ids is None:
+    visible_cuda_devices = _parse_visible_cuda_devices_env()
+    auto_gpu_ids = args.gpu_ids
+    if auto_gpu_ids is None and visible_cuda_devices is not None and len(visible_cuda_devices) > 1:
+        auto_gpu_ids = "all"
+        print(
+            "[INFO] Detected multiple visible GPUs from CUDA_VISIBLE_DEVICES. "
+            "Launching distributed training across all visible GPUs."
+        )
+
+    if auto_gpu_ids is None:
         run_train(task_id=task_id, cfg=args, log_dir=log_dir)
         return
 
-    selected_gpus, num_gpus = select_gpus(args.gpu_ids)
+    selected_gpus, num_gpus = select_gpus(auto_gpu_ids)
     if selected_gpus is None or num_gpus == 0:
         raise ValueError("No CUDA GPUs were selected. Provide valid --gpu-ids (e.g. --gpu-ids all or --gpu-ids [0,1]).")
 
@@ -479,6 +534,7 @@ def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
 
     import torchrunx
 
+    _configure_cpu_thread_env(force_single_thread=True)
     logging.basicConfig(level=logging.INFO)
     if "TORCHRUNX_LOG_DIR" not in os.environ:
         if args.torchrunx_log_dir is not None:
@@ -486,6 +542,13 @@ def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
         else:
             os.environ["TORCHRUNX_LOG_DIR"] = str(log_dir / "torchrunx")
 
+    print(
+        "[INFO] CPU thread env: "
+        f"OPENBLAS_NUM_THREADS={os.environ['OPENBLAS_NUM_THREADS']}, "
+        f"OMP_NUM_THREADS={os.environ['OMP_NUM_THREADS']}, "
+        f"MKL_NUM_THREADS={os.environ['MKL_NUM_THREADS']}, "
+        f"NUMEXPR_NUM_THREADS={os.environ['NUMEXPR_NUM_THREADS']}"
+    )
     print(f"[INFO] Launching multi-GPU training with {num_gpus} GPUs.")
     torchrunx.Launcher(
         hostnames=["localhost"],

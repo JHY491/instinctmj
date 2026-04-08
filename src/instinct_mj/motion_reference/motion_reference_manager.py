@@ -871,6 +871,11 @@ class MotionReferenceManager(Sensor):
             else:
                 raise ValueError(f"Unknown update_period_sample_strategy: {self.cfg.update_period_sample_strategy}")
 
+    def _enable_all_trajectories_all_buffers(self) -> None:
+        """Enable every trajectory in every motion buffer (full replica on this rank)."""
+        for buffer in self._motion_buffers.values():
+            buffer.enable_trajectories()
+
     def _assign_motion_trajectories_for_this_process(self, local_rank: int = 0, world_size: int | None = None):
         """Assign the motion trajectories for the current process based on the rank_id/world_size.
         `self._motion_buffer_num_trajectories` will be updated. As for the current process, only a subset of
@@ -879,8 +884,7 @@ class MotionReferenceManager(Sensor):
         if world_size is None or self.cfg.mp_split_method == "None":
             # single process, enable all trajectories for all motion buffers.
             # no split method, enable all trajectories for all motion buffers.
-            for buffer in self._motion_buffers.values():
-                buffer.enable_trajectories()
+            self._enable_all_trajectories_all_buffers()
         elif self.cfg.mp_split_method == "Even":
             # split the trajectories evenly (round-robin) for each process.
             # |----motion1-----|----motion2-----|----motion3-----|----motion4-----|----motion5-----|
@@ -892,6 +896,16 @@ class MotionReferenceManager(Sensor):
             )
             if len(idxs) % world_size != 0:
                 idxs = idxs[: -(len(idxs) % world_size)]
+            if len(idxs) == 0:
+                total_before_trim = sum(self._motion_buffer_num_trajectories.values())
+                if local_rank == 0:
+                    print(
+                        "[WARN] Motion reference: mp_split_method='Even' would assign zero trajectories "
+                        f"after alignment (total={total_before_trim}, world_size={world_size}). "
+                        "Replicating full motion on every rank (same as mp_split_method='None')."
+                    )
+                self._enable_all_trajectories_all_buffers()
+                return
             idxs = idxs.reshape(-1, world_size)
             idxs = idxs[:, local_rank]
             buffer_traj_start = 0
@@ -912,6 +926,15 @@ class MotionReferenceManager(Sensor):
             # |-------------------process1-------------------|-------------------process2----------|
             total_traj_global = sum(self._motion_buffer_num_trajectories.values())
             num_traj_per_process = total_traj_global // world_size
+            if total_traj_global > 0 and num_traj_per_process == 0:
+                if local_rank == 0:
+                    print(
+                        "[WARN] Motion reference: mp_split_method='Segment' gives zero trajectories per rank "
+                        f"(total={total_traj_global}, world_size={world_size}). "
+                        "Replicating full motion on every rank (same as mp_split_method='None')."
+                    )
+                self._enable_all_trajectories_all_buffers()
+                return
             process_traj_start = num_traj_per_process * local_rank
             process_traj_end = (
                 num_traj_per_process * (local_rank + 1) if local_rank < world_size - 1 else total_traj_global
@@ -935,6 +958,15 @@ class MotionReferenceManager(Sensor):
         """Assign which motion buffer is used for each envs. But defining this at startup stage leads to more stable
         buffer data behavior. It is just like the fixed terrain type in curriculum-based locomotion training setting.
         """
+        if not self._motion_buffers:
+            ws = dist.get_world_size() if dist.is_initialized() else 1
+            raise RuntimeError(
+                "Motion reference: no motion buffers left on this rank after distributed "
+                "trajectory assignment. Typical cause is world_size larger than the number "
+                "of motion trajectories (or Segment/Even split leaves this rank empty). "
+                f"world_size={ws}, mp_split_method={self.cfg.mp_split_method!r}. "
+                "Try fewer GPUs, more motion data, or mp_split_method='None'."
+            )
         # compute the ratio of trajectories for each motion buffer and how many envs should be assigned to each buffer
         total_traj = sum(self._motion_buffer_num_trajectories.values())
         traj_ratio_d = {name: num_traj / total_traj for name, num_traj in self._motion_buffer_num_trajectories.items()}

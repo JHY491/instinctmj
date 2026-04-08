@@ -2,16 +2,18 @@ import numpy as np
 import torch
 import warp as wp
 
-# disable warp module initialization messages
-wp.config.quiet = True
-# initialize the warp module
-wp.init()
-
 from . import kernels
+
+
+def _ensure_warp_initialized() -> None:
+    if not wp.is_initialized():
+        wp.config.quiet = True
+        wp.init()
 
 
 def convert_to_warp_mesh(points: np.ndarray, indices: np.ndarray, device: str) -> wp.Mesh:
     """Create a Warp mesh from vertices and triangle indices."""
+    _ensure_warp_initialized()
     return wp.Mesh(
         points=wp.array(points.astype(np.float32), dtype=wp.vec3, device=device),
         indices=wp.array(indices.astype(np.int32).flatten(), dtype=wp.int32, device=device),
@@ -28,6 +30,7 @@ def raycast_mesh(
     return_face_id: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
     """Performs ray-casting against a mesh."""
+    _ensure_warp_initialized()
     # extract device and shape information
     shape = ray_starts.shape
     device = ray_starts.device
@@ -122,6 +125,7 @@ def raycast_mesh_grouped(
     ### NOTE
         return_face_id might not work correctly with the current implementation of warp.
     """
+    _ensure_warp_initialized()
     # extract device and shape information
     shape = ray_starts.shape
     device = ray_starts.device

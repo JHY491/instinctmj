@@ -63,6 +63,14 @@ def _sample_debug_rows(rows: torch.Tensor, capacity: int | None) -> torch.Tensor
     return rows.index_select(0, sample_ids)
 
 
+def _safe_parallel_workers(max_cap: int = 8, reserve_cores: int = 2) -> int:
+    cpu_count = os.cpu_count() or 1
+    world_size = max(int(os.environ.get("WORLD_SIZE", "1")), 1)
+    usable_cores = max(1, cpu_count - reserve_cores)
+    per_rank_cores = max(1, usable_cores // world_size)
+    return max(1, min(per_rank_cores, max_cap))
+
+
 def _greedyconcat_component_labels(num_vertices: int, edge_pairs: np.ndarray) -> np.ndarray:
     """Assign connected-component labels for undirected edge pairs."""
     labels = np.full(num_vertices, -1, dtype=np.int32)
@@ -466,7 +474,7 @@ class RansacEdgeCylinder(EdgeCylinder):
             point_distance_threshold=self.cfg.point_distance_threshold,
             min_points=self.cfg.min_points,
         )
-        with ProcessPoolExecutor(max_workers=max(1, os.cpu_count() - 2)) as executor:
+        with ProcessPoolExecutor(max_workers=_safe_parallel_workers()) as executor:
             futures = {executor.submit(_fit_segments_for_group, grp, cfg_dict): i for i, grp in enumerate(groups)}
             for future in as_completed(futures):
                 segs = future.result()
@@ -597,7 +605,7 @@ class GreedyconcatEdgeCylinder(EdgeCylinder):
         cos_threshold = np.cos(np.deg2rad(self.cfg.adjacent_angle_threshold))
         workers = int(self.cfg.component_workers)
         if workers == 0:
-            workers = max(1, os.cpu_count() or 1)
+            workers = _safe_parallel_workers()
 
         processed_parts: list[np.ndarray]
         if workers <= 1 or E_pairs.shape[0] < 2048:
@@ -680,7 +688,7 @@ class RayEdgeCylinder(VirtualObstacleBase):
         # extract vertices and faces from the trimesh object
         points = mesh.vertices.astype(np.float32)
         indices = mesh.faces.astype(np.int32)
-        wp_mesh = convert_to_warp_mesh(points, indices, device="cuda")
+        wp_mesh = convert_to_warp_mesh(points, indices, device=str(self.device))
 
         min_bound, max_bound = mesh.bounds
         mesh_size = max_bound - min_bound  # ndarray of shape (3,)
@@ -761,7 +769,7 @@ class RayEdgeCylinder(VirtualObstacleBase):
             3,
         )
 
-        with ThreadPoolExecutor(max_workers=max(1, os.cpu_count() - 1)) as executor:
+        with ThreadPoolExecutor(max_workers=_safe_parallel_workers()) as executor:
             # Submit tasks for each camera
             futures = [
                 executor.submit(process_camera_edges, i, depth_image, normal_image, self.cfg)
@@ -793,7 +801,7 @@ class RayEdgeCylinder(VirtualObstacleBase):
             mask = valid & combined_mask
             return hits[mask]
 
-        with ThreadPoolExecutor(max_workers=min(camera_count, os.cpu_count() - 1)) as executor:
+        with ThreadPoolExecutor(max_workers=min(camera_count, _safe_parallel_workers())) as executor:
             futures = {executor.submit(process_camera, i): i for i in range(camera_count)}
             for future in as_completed(futures):
                 i = futures[future]
@@ -818,7 +826,7 @@ class RayEdgeCylinder(VirtualObstacleBase):
             point_distance_threshold=self.cfg.point_distance_threshold,
             min_points=self.cfg.min_points,
         )
-        with ProcessPoolExecutor(max_workers=max(1, os.cpu_count() - 1)) as executor:
+        with ProcessPoolExecutor(max_workers=_safe_parallel_workers()) as executor:
             futures = {executor.submit(_fit_segments_for_group, grp, cfg_dict): i for i, grp in enumerate(groups)}
             for future in as_completed(futures):
                 segs = future.result()
