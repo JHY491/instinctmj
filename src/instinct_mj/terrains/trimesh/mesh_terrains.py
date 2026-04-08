@@ -49,6 +49,14 @@ def _shutdown_hfield_raycast_executors() -> None:
 atexit.register(_shutdown_hfield_raycast_executors)
 
 
+def _safe_parallel_workers(max_cap: int = 8, reserve_cores: int = 2) -> int:
+    cpu_count = os.cpu_count() or 1
+    world_size = max(int(os.environ.get("WORLD_SIZE", "1")), 1)
+    usable_cores = max(1, cpu_count - reserve_cores)
+    per_rank_cores = max(1, usable_cores // world_size)
+    return max(1, min(per_rank_cores, max_cap))
+
+
 def _set_coacd_log_level(level: str) -> None:
     """Set CoACD logger level once per process."""
     global _COACD_LOG_LEVEL_SET
@@ -518,7 +526,7 @@ def _prewarm_coacd_disk_cache(
 
     worker_count = int(cfg.collision_coacd_prewarm_workers)
     if worker_count <= 0:
-        worker_count = max(os.cpu_count() or 1, 1)
+        worker_count = _safe_parallel_workers(max_cap=4)
     worker_count = min(worker_count, len(jobs))
 
     total_jobs = len(jobs)
@@ -1078,7 +1086,7 @@ def _add_collision_hfield_from_mesh(
         else:
             num_workers = int(cfg.collision_hfield_num_workers)
             if num_workers <= 0:
-                num_workers = max(os.cpu_count() or 1, 1)
+                num_workers = _safe_parallel_workers()
             raw = _raycast_hfield_parallel(
                 terrain_mesh=terrain_mesh,
                 ray_origins=ray_origins,
@@ -1278,7 +1286,7 @@ def _create_visual_hfield_from_mesh(
     if height is None:
         num_workers = int(cfg.hfield_num_workers)
         if num_workers <= 0:
-            num_workers = max(os.cpu_count() or 1, 1)
+            num_workers = _safe_parallel_workers()
 
         raw = _raycast_hfield_parallel(
             terrain_mesh=terrain_mesh,

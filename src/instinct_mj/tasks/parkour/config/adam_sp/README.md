@@ -48,6 +48,9 @@ AMP 观测组：
 
 ```bash
 instinct-train Instinct-Parkour-Simple-Adam-SP-v0
+
+# 多卡
+instinct-train Instinct-Parkour-Simple-Adam-SP-v0 --gpu-ids "[0,1]"
 ```
 
 可选常用参数：`--num-envs`、`--video` 等，与项目其他任务一致。
@@ -65,6 +68,9 @@ instinct-train Instinct-Parkour-Simple-Adam-SP-v0
 # 后台运行，日志写入 logs/instinct_rl/
 ./scripts/train_parkour_adam_sp.sh -n 4096 -b
 ./scripts/train_parkour_adam_sp.sh --num-envs 8192 --background
+
+# 多卡：脚本里的 --gpu 接受 CUDA_VISIBLE_DEVICES 风格列表
+./scripts/train_parkour_adam_sp.sh --gpu 0,1 -n 2048
 ```
 
 ## 回放

@@ -443,26 +443,6 @@ class HfSteppingStonesTerrainCfg(HfTerrainBaseCfg):
     platform_width: float = 1.0
 
 
-from . import hf_terrains
-
-_RAW_PERLIN_PLANE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_plane_terrain)
-_RAW_PERLIN_PYRAMID_SLOPED_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_sloped_terrain)
-_RAW_PERLIN_PYRAMID_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_stairs_terrain)
-_RAW_PERLIN_ONE_SIDED_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_one_sided_stairs_terrain)
-_RAW_PERLIN_DISCRETE_OBSTACLES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_discrete_obstacles_terrain)
-_RAW_PERLIN_WAVE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_wave_terrain)
-_RAW_PERLIN_STEPPING_STONES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stepping_stones_terrain)
-_RAW_PERLIN_PARAPET_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_parapet_terrain)
-_RAW_PERLIN_GUTTER_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_gutter_terrain)
-_RAW_PERLIN_STAIRS_UP_DOWN_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stairs_up_down_terrain)
-_RAW_PERLIN_STAIRS_DOWN_UP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stairs_down_up_terrain)
-_RAW_PERLIN_TILT_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_tilt_terrain)
-_RAW_PERLIN_TILTED_RAMP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_tilted_ramp_terrain)
-_RAW_PERLIN_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_slope_terrain)
-_RAW_PERLIN_CROSS_STONE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_stone_terrain)
-_RAW_PERLIN_SQUARE_GAP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_square_gap_terrain)
-
-
 @dataclass
 class WallTerrainCfgMixin:
     border_width: float = 0.0
@@ -770,3 +750,28 @@ class PerlinSquareGapTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
         return _RAW_PERLIN_SQUARE_GAP_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+# ---------------------------------------------------------------------------
+# Deferred import: hf_terrains depends on this module's base classes, so we
+# import it AFTER all Cfg classes are defined to break the circular-import
+# cycle (the _RAW_* names are only looked up at method-call time).
+# ---------------------------------------------------------------------------
+from . import hf_terrains
+
+_RAW_PERLIN_PLANE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_plane_terrain)
+_RAW_PERLIN_PYRAMID_SLOPED_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_sloped_terrain)
+_RAW_PERLIN_PYRAMID_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_pyramid_stairs_terrain)
+_RAW_PERLIN_ONE_SIDED_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_one_sided_stairs_terrain)
+_RAW_PERLIN_DISCRETE_OBSTACLES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_discrete_obstacles_terrain)
+_RAW_PERLIN_WAVE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_wave_terrain)
+_RAW_PERLIN_STEPPING_STONES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stepping_stones_terrain)
+_RAW_PERLIN_PARAPET_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_parapet_terrain)
+_RAW_PERLIN_GUTTER_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_gutter_terrain)
+_RAW_PERLIN_STAIRS_UP_DOWN_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stairs_up_down_terrain)
+_RAW_PERLIN_STAIRS_DOWN_UP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stairs_down_up_terrain)
+_RAW_PERLIN_TILT_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_tilt_terrain)
+_RAW_PERLIN_TILTED_RAMP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_tilted_ramp_terrain)
+_RAW_PERLIN_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_slope_terrain)
+_RAW_PERLIN_CROSS_STONE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_stone_terrain)
+_RAW_PERLIN_SQUARE_GAP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_square_gap_terrain)
