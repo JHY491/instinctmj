@@ -30,6 +30,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
+from instinct_mj.tasks.parkour.mdp.curriculums import _compose_velocity_stage
 from instinct_mj.assets.adam_sp import (
     ADAM_SP_MJCF_PATH,
     adam_sp_symmetric_augmentation_joint_mapping,
@@ -144,7 +145,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
     edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
-        cylinder_radius=0.03,
+        cylinder_radius=0.05,
         min_points=2,
         component_workers=0,
         merge_collinear_gap=0.09,
@@ -974,6 +975,26 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 sensor_cfg.debug_vis = True
         cfg.scene.terrain.collision_debug_vis = True
         cfg.commands["base_velocity"].debug_vis = True
+        # Match training's highest command_vel stage (last lin_velocity_stages entry) so play
+        # exercises max lin_vel_x caps; ang_vel_z stays from base velocity_ranges via compose.
+        cmd_vel_cfg = cfg.curriculum.get("command_vel")
+        if cmd_vel_cfg is not None:
+            stages = cmd_vel_cfg.params.get("lin_velocity_stages") or []
+            if stages:
+                base_cmd = cfg.commands["base_velocity"]
+                base_ranges = {
+                    "lin_vel_x": base_cmd.ranges.lin_vel_x,
+                    "lin_vel_y": base_cmd.ranges.lin_vel_y,
+                    "ang_vel_z": base_cmd.ranges.ang_vel_z,
+                }
+                composed = _compose_velocity_stage(
+                    base_ranges,
+                    copy.deepcopy(base_cmd.velocity_ranges),
+                    stages[-1],
+                )
+                vr = composed.get("velocity_ranges")
+                if vr is not None:
+                    base_cmd.velocity_ranges = vr
         cfg.curriculum.pop("command_vel", None)
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
