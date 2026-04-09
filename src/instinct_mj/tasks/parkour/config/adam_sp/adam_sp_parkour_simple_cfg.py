@@ -145,7 +145,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
     edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
-        cylinder_radius=0.05,
+        cylinder_radius=0.03,
         min_points=2,
         component_workers=0,
         merge_collinear_gap=0.09,
