@@ -30,7 +30,6 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
-from instinct_mj.tasks.parkour.mdp.curriculums import _compose_velocity_stage
 from instinct_mj.assets.adam_sp import (
     ADAM_SP_MJCF_PATH,
     adam_sp_symmetric_augmentation_joint_mapping,
@@ -305,7 +304,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             velocity_ranges={
                 "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (0.0, 0.0)},
                 "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
-                "one_sided_stairs": {"lin_vel_x": (0.3, 0.8), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
+                "one_sided_stairs": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -752,71 +751,6 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
     }
     cfg.curriculum = {
-        "command_vel": CurriculumTermCfg(
-            func=parkour_mdp.adaptive_commands_vel_by_tracking,
-            params={
-                "command_name": "base_velocity",
-                "lin_vel_threshold": (0.65, 0.8),
-                "smoothing": 0.2,
-                "init_lin_stage": 0,
-                "lin_velocity_stages": [
-                    {
-                        "lin_vel_x": (0.0, 0.0),
-                        "lin_vel_y": (0.0, 0.0),
-                        "velocity_ranges": {
-                            "perlin_rough_stand": {
-                                "lin_vel_x": (0.0, 0.0),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "perlin_rough": {
-                                "lin_vel_x": (0.3, 1.0),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "one_sided_stairs": {
-                                "lin_vel_x": (0.3, 0.8),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                        },
-                    },
-                    {
-                        "lin_vel_x": (0.0, 0.0),
-                        "lin_vel_y": (0.0, 0.0),
-                        "velocity_ranges": {
-                            "perlin_rough_stand": {
-                                "lin_vel_x": (0.0, 0.0),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "perlin_rough": {
-                                "lin_vel_x": (0.3, 1.5),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "one_sided_stairs": {
-                                "lin_vel_x": (0.3, 1.2),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                        },
-                    },
-                    {
-                        "lin_vel_x": (0.0, 0.0),
-                        "lin_vel_y": (0.0, 0.0),
-                        "velocity_ranges": {
-                            "perlin_rough_stand": {
-                                "lin_vel_x": (0.0, 0.0),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "perlin_rough": {
-                                "lin_vel_x": (0.5, 2.0),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                            "one_sided_stairs": {
-                                "lin_vel_x": (0.5, 1.6),
-                                "lin_vel_y": (0.0, 0.0),
-                            },
-                        },
-                    },
-                ],
-            },
-        ),
         "terrain_levels": CurriculumTermCfg(
             func=parkour_mdp.tracking_exp_vel,
             params={
@@ -975,27 +909,6 @@ def instinct_adam_sp_parkour_simple_env_cfg(
                 sensor_cfg.debug_vis = True
         cfg.scene.terrain.collision_debug_vis = True
         cfg.commands["base_velocity"].debug_vis = True
-        # Match training's highest command_vel stage (last lin_velocity_stages entry) so play
-        # exercises max lin_vel_x caps; ang_vel_z stays from base velocity_ranges via compose.
-        cmd_vel_cfg = cfg.curriculum.get("command_vel")
-        if cmd_vel_cfg is not None:
-            stages = cmd_vel_cfg.params.get("lin_velocity_stages") or []
-            if stages:
-                base_cmd = cfg.commands["base_velocity"]
-                base_ranges = {
-                    "lin_vel_x": base_cmd.ranges.lin_vel_x,
-                    "lin_vel_y": base_cmd.ranges.lin_vel_y,
-                    "ang_vel_z": base_cmd.ranges.ang_vel_z,
-                }
-                composed = _compose_velocity_stage(
-                    base_ranges,
-                    copy.deepcopy(base_cmd.velocity_ranges),
-                    stages[-1],
-                )
-                vr = composed.get("velocity_ranges")
-                if vr is not None:
-                    base_cmd.velocity_ranges = vr
-        cfg.curriculum.pop("command_vel", None)
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
         cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
