@@ -1,0 +1,24 @@
+---
+description: mjlab-skillkit guardrails (author)
+globs:
+  - "**/*.py"
+alwaysApply: false
+---
+
+# mjlab-skillkit Guardrails (author)
+
+- This skillkit supports **mjlab-native authoring** only: new tasks, EnvCfg/scene, manager terms, sensors, terrain, RL wiring, mesh import, registration.
+- Use `mujocolab/anymal_c_velocity` and existing `mjlab` tasks as references for layout and registration when they match the target project.
+- Resolve references in this order: target repo -> local `mjlab/` checkout if present -> bundled skill references -> online docs only if still blocked.
+- Do not block authoring just because the workspace has no `mjlab/` directory.
+- Do not modify `mujocolab/mjlab` source.
+- Final implementation must be mjlab-native.
+- No compat layer, adapter shim, or bridge wrapper.
+- Manager config must be dict-based (`dict[str, XxxTermCfg]`), no manager `@configclass`.
+- Prefer official mjlab modules directly:
+  - `mjlab.envs` for env shell
+  - `mjlab.scene` for scene composition
+  - `mjlab.managers` for manager term configs
+  - `mjlab.envs.mdp` for built-in action/obs/reward/event/metric/termination helpers
+  - `mjlab.sensor` / `mjlab.sim` / `mjlab.terrains` / `mjlab.rl` / `mjlab.tasks.registry` for domain-specific wiring
+  - nearest target-repo or local task example for new mjlab code

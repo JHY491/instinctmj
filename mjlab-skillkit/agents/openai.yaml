@@ -1,0 +1,4 @@
+interface:
+  display_name: "mjlab-skillkit"
+  short_description: "mjlab-native authoring (tasks, managers, scene, RL)"
+  default_prompt: "Use $mjlab-skillkit for mjlab-native authoring only. Resolve references in this order: target repo -> local `mjlab/` checkout if present -> bundled skill references -> online docs only if still blocked. Do not bulk-load the whole upstream docs tree into context; after the bundled references, open only the exact page or code file still needed. Read the authoring workflow and authoring recipes first, then load only the matching mjlab API references (envs/managers/scene/sensor/sim/terrains/rl/tasks), plus `mjlab.envs.mdp` helpers for actions/observations/rewards/events/metrics/terminations when relevant. Do not block authoring just because the workspace has no `mjlab/` directory. Enforce dict-based managers, prefer public mjlab APIs and nearest local task examples, and avoid compatibility layers."
