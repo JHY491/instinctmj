@@ -252,19 +252,65 @@ def _parse_visible_cuda_devices_env() -> list[int] | None:
     return [int(token.strip()) for token in raw.split(",") if token.strip()]
 
 
-def _configure_cpu_thread_env(force_single_thread: bool = False) -> None:
-    # Avoid BLAS/OpenMP oversubscription when torchrunx spawns one worker per GPU.
-    thread_env_defaults = {
-        "OPENBLAS_NUM_THREADS": "1",
-        "OMP_NUM_THREADS": "1",
-        "MKL_NUM_THREADS": "1",
-        "NUMEXPR_NUM_THREADS": "1",
-    }
-    for env_name, env_value in thread_env_defaults.items():
-        if force_single_thread:
-            os.environ[env_name] = env_value
+def _effective_cpu_quota_from_cgroup() -> int | None:
+    """Return cgroup CPU quota (rounded down) if limited; None if unlimited or unknown."""
+    cpu_max = Path("/sys/fs/cgroup/cpu.max")
+    if cpu_max.is_file():
+        try:
+            parts = cpu_max.read_text().strip().split()
+            if len(parts) >= 2 and parts[0].lower() != "max":
+                quota_us = int(parts[0])
+                period_us = int(parts[1])
+                if period_us > 0 and quota_us > 0:
+                    return max(1, quota_us // period_us)
+        except (OSError, ValueError):
+            pass
+    try:
+        q_path = Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+        p_path = Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+        if q_path.is_file() and p_path.is_file():
+            quota_us = int(q_path.read_text().strip())
+            period_us = int(p_path.read_text().strip())
+            if quota_us > 0 and period_us > 0:
+                return max(1, quota_us // period_us)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _detect_usable_cpu_count() -> int:
+    """Prefer cgroup vCPU cap (e.g. AutoDL); else affinity or os.cpu_count()."""
+    quota = _effective_cpu_quota_from_cgroup()
+    if quota is not None:
+        return quota
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except AttributeError:
+        pass
+    n = os.cpu_count()
+    return max(1, n) if n else 1
+
+
+def _configure_cpu_thread_env(*, world_size: int) -> None:
+    # Split BLAS/OpenMP threads across torchrunx workers to avoid oversubscription;
+    # use cgroup quota when present so cloud caps (e.g. 30 vCPU) are respected.
+    usable = _detect_usable_cpu_count()
+    if world_size > 1:
+        threads = max(1, usable // world_size)
+    else:
+        threads = max(1, usable)
+    thread_value = str(threads)
+    names = (
+        "OPENBLAS_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    )
+    for env_name in names:
+        if world_size > 1:
+            os.environ[env_name] = thread_value
         else:
-            os.environ.setdefault(env_name, env_value)
+            os.environ.setdefault(env_name, thread_value)
 
 
 def _bind_cuda_runtime_device(device: str) -> None:
@@ -316,7 +362,8 @@ def _resolve_distributed_runtime(
 
 def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     log_dir = log_dir.expanduser().resolve()
-    _configure_cpu_thread_env(force_single_thread=int(os.environ.get("WORLD_SIZE", "1")) > 1)
+    world_size_threads = int(os.environ.get("WORLD_SIZE", "1"))
+    _configure_cpu_thread_env(world_size=world_size_threads)
 
     if InstinctRlVecEnvWrapper is None:
         raise ImportError(
@@ -325,6 +372,16 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
             '  pip install -e "git+https://github.com/project-instinct/instinct_rl.git#egg=instinct_rl"'
         )
     device, seed, rank, world_size, is_distributed = _resolve_distributed_runtime(cfg)
+
+    if rank == 0 and world_size_threads == 1:
+        print(
+            "[INFO] CPU thread env: "
+            f"cgroup_usable_cpus≈{_detect_usable_cpu_count()}, "
+            f"OPENBLAS_NUM_THREADS={os.environ['OPENBLAS_NUM_THREADS']}, "
+            f"OMP_NUM_THREADS={os.environ['OMP_NUM_THREADS']}, "
+            f"MKL_NUM_THREADS={os.environ['MKL_NUM_THREADS']}, "
+            f"NUMEXPR_NUM_THREADS={os.environ['NUMEXPR_NUM_THREADS']}"
+        )
 
     if device.startswith("cuda"):
         _bind_cuda_runtime_device(device)
@@ -502,7 +559,6 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
 def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
     args = args or TrainConfig.from_task(task_id)
-    _configure_cpu_thread_env()
     log_root_path = Path("logs") / "instinct_rl" / args.agent.experiment_name
     log_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if args.agent.run_name:
@@ -534,13 +590,14 @@ def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
 
     import torchrunx
 
-    _configure_cpu_thread_env(force_single_thread=True)
+    _configure_cpu_thread_env(world_size=num_gpus)
     logging.basicConfig(level=logging.INFO)
     if "TORCHRUNX_LOG_DIR" not in os.environ:
         if args.torchrunx_log_dir is not None:
             os.environ["TORCHRUNX_LOG_DIR"] = args.torchrunx_log_dir
         else:
-            os.environ["TORCHRUNX_LOG_DIR"] = str(log_dir / "torchrunx")
+            # 空字符串：不写入 {log_dir}/torchrunx，与 mjlab 文档一致；需要时传 --torchrunx-log-dir 或预先 export。
+            os.environ["TORCHRUNX_LOG_DIR"] = ""
 
     print(
         "[INFO] CPU thread env: "
