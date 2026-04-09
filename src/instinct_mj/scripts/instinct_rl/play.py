@@ -446,7 +446,12 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
     checkpoint: Path | None = None
 
     has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-    if viewer_backend != "native" or not has_display:
+    # Only strip GUI debug when there is no interactive viewer: headless native, or no viewer at all.
+    # Viser is interactive without DISPLAY/WAYLAND; do not clear command debug_vis so cmd vs actual arrows work.
+    headless_for_debug = viewer_backend == "none" or (
+        viewer_backend == "native" and not has_display
+    )
+    if headless_for_debug or cfg.video:
         _disable_headless_debug_visualization(env_cfg)
 
     if cfg.num_envs is not None:
