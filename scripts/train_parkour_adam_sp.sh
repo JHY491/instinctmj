@@ -109,9 +109,9 @@ LOG_FILE="${LOG_DIR}/train_parkour_adam_sp_${TIMESTAMP}.log"
 # 过滤已知的 MuJoCo 刷屏警告。
 # 这些告警在不同版本/路径下可能走 stdout 或 stderr，所以两边都过滤。
 filter_output() {
-  # MuJoCo 刷屏；多卡时 torchrunx 会给行前加 INFO:torchrunx.<host>:，用行内匹配一并滤掉。
+  # MuJoCo 刷屏；多卡时 torchrunx 会在行前加 INFO:torchrunx.<host>:，hfield 文案须行内匹配（勿用 ^ 锚行首）。
   grep --line-buffered -vE \
-    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+|height field collision overflow|^[[:space:]]*decrease the number of hfield rows/cols or modify size of colliding geom[[:space:]]*$"
+    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+|height field collision overflow|decrease the number of hfield rows/cols or modify size of colliding geom"
 }
 
 if [[ "$BACKGROUND" == true ]]; then

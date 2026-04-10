@@ -60,7 +60,7 @@ PLAY_CMD+=("${EXTRA_ARGS[@]}")
 # 再叠加 play 侧对通用 warning 文案的过滤。
 filter_output() {
   grep --line-buffered -vE \
-    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+|height field collision overflow|^[[:space:]]*decrease the number of hfield rows/cols or modify size of colliding geom[[:space:]]*$" \
+    "opt\.ccd_iterations, currently set to [0-9]+, needs to be increased|contact match overflow: please increase Option\.contact_sensor_maxmatch to [0-9]+|height field collision overflow|decrease the number of hfield rows/cols or modify size of colliding geom" \
     | grep --line-buffered -viE \
       'warning|UserWarning|DeprecationWarning|FutureWarning|PendingDeprecationWarning|RuntimeWarning|VisibleDeprecationWarning|ResourceWarning|SyntaxWarning|BytesWarning|UnicodeWarning|ImportWarning|EncodingWarning|\[W[0-9]{4}\]|^W[0-9]{4}[[:space:]]|: WARN:|CUDA Warning|ExperimentalWarning'
 }
