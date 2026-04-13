@@ -106,7 +106,7 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     max_iterations: int = 30000
     save_interval: int = 500
     log_interval: int = 10
-    experiment_name: str = "adam_sp_parkour_simple_amp_vision"
+    experiment_name: str = "adam_sp_parkour_amp_vision"
     resume: bool = False
     load_run: str = "^(?!_play$).*"
     empirical_normalization: bool = False
@@ -115,6 +115,6 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     normalizers: dict[str, InstinctRlNormalizerCfg] = field(default_factory=lambda: default_policy_critic_normalizers())
 
 
-def adam_parkour_simple_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """Adam SP simple parkour AMP runner config with depth vision encoder."""
+def adam_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Adam SP parkour AMP runner config with depth vision encoder."""
     return AdamSPParkourVisionAmpRunnerCfg()

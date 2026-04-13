@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Simple-Adam-SP-v0 训练脚本
+# Instinct-Parkour-Adam-SP-v0 训练脚本
 # 支持指定环境数量、后台运行，其余参数透传给 instinct-train。
 #
 # 用法:
@@ -26,7 +26,7 @@
 
 set -e
 
-TASK_ID="Instinct-Parkour-Simple-Adam-SP-v0"
+TASK_ID="Instinct-Parkour-Adam-SP-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs/instinct_rl"

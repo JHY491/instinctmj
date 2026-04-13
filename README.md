@@ -116,10 +116,8 @@ Registered task IDs:
 - `Instinct-Perceptive-Shadowing-G1-Play-v0`
 - `Instinct-Perceptive-Vae-G1-v0`
 - `Instinct-Perceptive-Vae-G1-Play-v0`
-- `Instinct-Parkour-Target-G1-v0`
-- `Instinct-Parkour-Target-G1-Play-v0`
-- `Instinct-Parkour-Target-Amp-G1-v0`
-- `Instinct-Parkour-Target-Amp-G1-Play-v0`
+- `Instinct-Parkour-Adam-SP-v0`
+- `Instinct-Parkour-Adam-SP-Play-v0`
 
 Use the CLI to inspect the full list at any time:
 
@@ -134,7 +132,7 @@ Train:
 
 ```bash
 instinct-train Instinct-Locomotion-Flat-G1-v0
-instinct-train Instinct-Parkour-Target-G1-v0
+instinct-train Instinct-Parkour-Adam-SP-v0
 instinct-train Instinct-Perceptive-Shadowing-G1-v0
 ```
 
@@ -142,7 +140,7 @@ Play (`--load-run` is required):
 
 ```bash
 instinct-play Instinct-Locomotion-Flat-G1-Play-v0 --load-run <run_name>
-instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name>
+instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name>
 instinct-play Instinct-Perceptive-Shadowing-G1-Play-v0 --load-run <run_name>
 ```
 
@@ -161,12 +159,11 @@ Pretrained weights:
 Export ONNX for parkour:
 
 ```bash
-instinct-play Instinct-Parkour-Target-G1-Play-v0 --load-run <run_name> --export-onnx
-instinct-play Instinct-Parkour-Target-Amp-G1-Play-v0 --load-run <run_name> --export-onnx
+instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name> --export-onnx
 ```
 
 Before training or playing AMP parkour tasks, update the local dataset root in
-`src/instinct_mj/tasks/parkour/config/g1/g1_parkour_target_amp_cfg.py`:
+`src/instinct_mj/tasks/parkour/config/adam_sp/adam_sp_parkour_cfg.py`:
 
 ```python
 _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")

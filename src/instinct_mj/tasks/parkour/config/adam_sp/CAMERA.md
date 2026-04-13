@@ -1,6 +1,6 @@
 # Parkour 深度相机配置说明
 
-本文档说明 Adam SP / G1 Parkour Target AMP 任务中使用的 `NoisyGroupedRayCasterCameraCfg` 深度相机配置，对应代码见 `adam_sp_parkour_target_amp_cfg.py` 与 `g1_parkour_target_amp_cfg.py` 中的 `scene.sensors`。
+本文档说明 Adam SP Parkour 中使用的 `NoisyGroupedRayCasterCameraCfg` 深度相机配置，对应代码见 `adam_sp_parkour_cfg.py` 中 `scene.sensors`。
 
 ---
 
@@ -56,7 +56,7 @@
 | 参数                    | 含义                                                                                                                |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ray_alignment="yaw"` | 射线方向只随父体 yaw 旋转，不随 pitch/roll 变化，适合水平朝向的相机。                                                                       |
-| `offset`              | 相对 `frame`（torso_link）的位姿：`pos` 平移、`rot` 四元数 (w,x,y,z)，`convention="world"` 表示按世界系约定（前 +X、上 +Z）。当前数值为 G1 头相机标称位姿。 |
+| `offset`              | 相对 `frame`（torso_link）的位姿：`pos` 平移、`rot` 四元数 (w,x,y,z)，`convention="world"` 表示按世界系约定（前 +X、上 +Z）。当前数值为躯干挂载深度相机的标称位姿。 |
 
 
 ---

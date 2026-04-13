@@ -1,4 +1,4 @@
-"""Adam SP simple parkour: noise-only terrain, no vision, with AMP, no MoE."""
+"""Adam SP parkour: noise-only terrain, no vision, with AMP, no MoE."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ motion_reference_cfg = MotionReferenceManagerCfg(
 )
 
 
-def instinct_adam_sp_parkour_simple_env_cfg(
+def instinct_adam_sp_parkour_env_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
@@ -249,7 +249,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
             vertical_aperture=2 * math.tan(math.radians(57.74) / 2.0),
             ray_alignment="base",
             offset=NoisyGroupedRayCasterCameraCfg.OffsetCfg(
-                # G1 Robot head camera nominal pose
+                # Torso-mounted depth camera nominal pose (world convention)
                 pos=(
                     0.0958,
                     0.0475,
@@ -890,7 +890,7 @@ def instinct_adam_sp_parkour_simple_env_cfg(
         ),
     }
 
-    setattr(cfg, "run_name", "AdamSPParkourSimple")
+    setattr(cfg, "run_name", "AdamSPParkour")
 
     if play:
         cfg.scene.num_envs = 10
@@ -919,12 +919,12 @@ def instinct_adam_sp_parkour_simple_env_cfg(
     return cfg
 
 
-def instinct_adam_sp_parkour_simple_final_cfg(
+def instinct_adam_sp_parkour_final_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Final Adam SP simple parkour env config (with optional play viewer overrides)."""
-    cfg = instinct_adam_sp_parkour_simple_env_cfg(play=play)
+    """Final Adam SP parkour env config (with optional play viewer overrides)."""
+    cfg = instinct_adam_sp_parkour_env_cfg(play=play)
     if play:
         cfg.viewer = ViewerConfig(
             lookat=(0.0, 0.75, 0.0),

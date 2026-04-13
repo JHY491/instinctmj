@@ -1,7 +1,7 @@
 """Adam SP parkour env cfg builders (mjlab-native style).
 
-This module mirrors the role of `mjlab.tasks.tracking.config.g1.env_cfgs` but for
-InstinctMJ's local Adam SP asset.
+Provides a small flat base `ManagerBasedRlEnvCfg` for Adam SP that downstream
+parkour factories extend with terrain, sensors, and rewards.
 """
 
 from __future__ import annotations
@@ -29,9 +29,9 @@ def adam_sp_flat_parkour_env_cfg(*, play: bool = False, has_state_estimation: bo
 
   Notes:
   - This is intentionally a small, stable base config that downstream task
-    factories (e.g. parkour simple/AMP) can mutate.
-  - `has_state_estimation` is kept for API parity with mjlab's g1 env_cfgs;
-    currently it does not change the core observation terms here.
+    factories (e.g. parkour / AMP) can mutate.
+  - `has_state_estimation` is kept for API parity with mjlab tracking env cfg
+    factories; currently it does not change the core observation terms here.
   """
 
   robot_cfg = copy.deepcopy(ADAM_SP_ROBOT_CFG)

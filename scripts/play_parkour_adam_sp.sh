@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Simple-Adam-SP Play：透传参数给 instinct-play，并抑制 / 过滤告警输出。
+# Instinct-Parkour-Adam-SP-Play-v0：透传参数给 instinct-play，并抑制 / 过滤告警输出。
 #
 # 用法（仅 --load-run）:
 #   ./scripts/play_parkour_adam_sp.sh --load-run <run>
@@ -15,7 +15,7 @@
 
 set -e
 
-TASK_ID="Instinct-Parkour-Simple-Adam-SP-Play-v0"
+TASK_ID="Instinct-Parkour-Adam-SP-Play-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CUDA_VISIBLE_DEVICES_VAL="${CUDA_VISIBLE_DEVICES:-}"

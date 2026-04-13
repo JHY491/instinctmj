@@ -1,8 +1,8 @@
-"""Instinct-RL runner configs for G1 parkour tasks."""
+"""Instinct-RL runner configs for Adam SP parkour tasks."""
 
-from .instinct_rl_ppo_simple_cfg import adam_parkour_simple_ppo_runner_cfg
+from .instinct_rl_ppo_cfg import adam_parkour_ppo_runner_cfg
 
 __all__ = [
 
-    "adam_parkour_simple_ppo_runner_cfg",
+    "adam_parkour_ppo_runner_cfg",
 ]
