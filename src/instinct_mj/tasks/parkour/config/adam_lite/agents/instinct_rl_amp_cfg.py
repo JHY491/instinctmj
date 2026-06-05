@@ -106,7 +106,7 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     max_iterations: int = 30000
     save_interval: int = 500
     log_interval: int = 10
-    experiment_name: str = "adam_sp_parkour_amp_vision"
+    experiment_name: str = "adam_lite_parkour_amp_vision"
     resume: bool = False
     load_run: str = "^(?!_play$).*"
     empirical_normalization: bool = False

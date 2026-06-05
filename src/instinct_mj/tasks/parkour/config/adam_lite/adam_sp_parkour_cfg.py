@@ -30,10 +30,10 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
-from instinct_mj.assets.adam_sp import (
-    ADAM_SP_MJCF_PATH,
-    adam_sp_symmetric_augmentation_joint_mapping,
-    adam_sp_symmetric_augmentation_joint_reverse_buf,
+from instinct_mj.assets.adam_lite import (
+    ADAM_LITE_MJCF_PATH,
+    adam_lite_symmetric_augmentation_joint_mapping,
+    adam_lite_symmetric_augmentation_joint_reverse_buf,
 )
 from instinct_mj.motion_reference import MotionReferenceManagerCfg
 from instinct_mj.motion_reference.motion_files.amass_motion_cfg import AmassMotionCfg as AmassMotionCfgBase
@@ -45,7 +45,7 @@ from instinct_mj.tasks.mdp import (
     parkour_amp_reference_joint_vel_rel,
     parkour_amp_reference_projected_gravity,
 )
-from instinct_mj.tasks.parkour.config.adam_sp.env_cfgs import adam_sp_flat_parkour_env_cfg
+from instinct_mj.tasks.parkour.config.adam_lite.env_cfgs import adam_sp_flat_parkour_env_cfg
 from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
     NOISE_ONLY_TERRAINS_CFG,
     NOISE_ONLY_TERRAINS_CFG_PLAY,
@@ -93,7 +93,7 @@ class AmassMotionCfg(AmassMotionCfgBase):
 motion_reference_cfg = MotionReferenceManagerCfg(
     name="motion_reference",
     entity_name="robot",
-    robot_model_path=ADAM_SP_MJCF_PATH,
+    robot_model_path=ADAM_LITE_MJCF_PATH,
     link_of_interests=[
         "pelvis",
         "torso_link",
@@ -109,8 +109,8 @@ motion_reference_cfg = MotionReferenceManagerCfg(
         "right_ankle_roll_link",
     ],
     symmetric_augmentation_link_mapping=[0, 1, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10],
-    symmetric_augmentation_joint_mapping=list(adam_sp_symmetric_augmentation_joint_mapping),
-    symmetric_augmentation_joint_reverse_buf=list(adam_sp_symmetric_augmentation_joint_reverse_buf),
+    symmetric_augmentation_joint_mapping=list(adam_lite_symmetric_augmentation_joint_mapping),
+    symmetric_augmentation_joint_reverse_buf=list(adam_lite_symmetric_augmentation_joint_reverse_buf),
     frame_interval_s=0.02,
     update_period=0.02,
     num_frames=10,

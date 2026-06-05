@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-SP-v0 训练脚本
+# Instinct-Parkour-Adam-Lite-v0 训练脚本
 # 支持指定环境数量、后台运行，其余参数透传给 instinct-train。
 #
 # 用法:
-#   ./scripts/train_parkour_adam_sp.sh                    # 前台：未设置 CUDA 时用节点上全部 GPU（torchrunx）
-#   ./scripts/train_parkour_adam_sp.sh --gpu 0          # 仅第 0 张卡（单进程）
-#   ./scripts/train_parkour_adam_sp.sh -n 4096          # 前台，4096 环境
-#   ./scripts/train_parkour_adam_sp.sh -n 2048 -b       # 后台，2048 环境
-#   ./scripts/train_parkour_adam_sp.sh --gpu 1 -n 4096  # 指定第 1 张 GPU
-#   ./scripts/train_parkour_adam_sp.sh --gpu 0,1        # 限定可见 0,1：不传 --gpu-ids，由 train.py 按可见卡数自动起多卡
+#   ./scripts/train_parkour_adam_lite.sh                    # 前台：未设置 CUDA 时用节点上全部 GPU（torchrunx）
+#   ./scripts/train_parkour_adam_lite.sh --gpu 0          # 仅第 0 张卡（单进程）
+#   ./scripts/train_parkour_adam_lite.sh -n 4096          # 前台，4096 环境
+#   ./scripts/train_parkour_adam_lite.sh -n 2048 -b       # 后台，2048 环境
+#   ./scripts/train_parkour_adam_lite.sh --gpu 1 -n 4096  # 指定第 1 张 GPU
+#   ./scripts/train_parkour_adam_lite.sh --gpu 0,1        # 限定可见 0,1：不传 --gpu-ids，由 train.py 按可见卡数自动起多卡
 #   已 export CUDA_VISIBLE_DEVICES=0,1 时直接运行脚本，行为与上一行相同
-#   ./scripts/train_parkour_adam_sp.sh --gpu-ids "[0,1]" # 显式透传 instinct-train（与未设置 CUDA 时「物理卡下标」语义一致）
-#   ./scripts/train_parkour_adam_sp.sh --num-envs 8192 --background
+#   ./scripts/train_parkour_adam_lite.sh --gpu-ids "[0,1]" # 显式透传 instinct-train（与未设置 CUDA 时「物理卡下标」语义一致）
+#   ./scripts/train_parkour_adam_lite.sh --num-envs 8192 --background
 #
 # 断点续训（默认不 resume，需显式加 --resume；传给 instinct-train 为 agent dot override）:
-#   ./scripts/train_parkour_adam_sp.sh --resume --load-run 2026-03-24_11-19-28 --checkpoint model_29500.pt
+#   ./scripts/train_parkour_adam_lite.sh --resume --load-run 2026-03-24_11-19-28 --checkpoint model_29500.pt
 # 等价于:
 #   instinct-train ... --agent.resume true \
 #     --agent.load-run 2026-03-24_11-19-28 \
 #     --agent.load-checkpoint model_29500.pt
 # （脚本内使用 --agent.load_run / --agent.load_checkpoint，因 dataclass 字段为下划线，与上式等价。）
-#   ./scripts/train_parkour_adam_sp.sh --resume --load-run /abs/path/to/run_dir --checkpoint model_29500.pt
+#   ./scripts/train_parkour_adam_lite.sh --resume --load-run /abs/path/to/run_dir --checkpoint model_29500.pt
 #
 
 set -e
 
-TASK_ID="Instinct-Parkour-Adam-SP-v0"
+TASK_ID="Instinct-Parkour-Adam-Lite-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs/instinct_rl"
@@ -105,7 +105,7 @@ TRAIN_CMD+=("${EXTRA_ARGS[@]}")
 
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-LOG_FILE="${LOG_DIR}/train_parkour_adam_sp_${TIMESTAMP}.log"
+LOG_FILE="${LOG_DIR}/train_parkour_adam_lite_${TIMESTAMP}.log"
 # 过滤已知的 MuJoCo 刷屏警告。
 # 这些告警在不同版本/路径下可能走 stdout 或 stderr，所以两边都过滤。
 filter_output() {

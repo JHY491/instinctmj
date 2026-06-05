@@ -35,7 +35,7 @@ def adam_parkour_ppo_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
         max_iterations=30000,
         save_interval=100,
         log_interval=10,
-        experiment_name="adam_sp_parkour",
+        experiment_name="adam_lite_parkour",
         run_name="",
         policy_observation_group="policy",
         critic_observation_group="critic",

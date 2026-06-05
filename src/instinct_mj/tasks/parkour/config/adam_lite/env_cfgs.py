@@ -21,7 +21,7 @@ from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.assets.adam_sp import ADAM_SP_ROBOT_CFG, adam_sp_delayed_actuator_cfgs
+from instinct_mj.assets.adam_lite import ADAM_LITE_ROBOT_CFG
 
 
 def adam_sp_flat_parkour_env_cfg(*, play: bool = False, has_state_estimation: bool = True) -> ManagerBasedRlEnvCfg:
@@ -34,7 +34,7 @@ def adam_sp_flat_parkour_env_cfg(*, play: bool = False, has_state_estimation: bo
     factories; currently it does not change the core observation terms here.
   """
 
-  robot_cfg = copy.deepcopy(ADAM_SP_ROBOT_CFG)
+  robot_cfg = copy.deepcopy(ADAM_LITE_ROBOT_CFG)
 
   cfg = ManagerBasedRlEnvCfg(
     scene=SceneCfg(

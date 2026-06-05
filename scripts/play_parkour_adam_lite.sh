@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-SP-Play-v0：透传参数给 instinct-play，并抑制 / 过滤告警输出。
+# Instinct-Parkour-Adam-Lite-Play-v0：透传参数给 instinct-play，并抑制 / 过滤告警输出。
 #
 # 用法（仅 --load-run）:
-#   ./scripts/play_parkour_adam_sp.sh --load-run <run>
-#   ./scripts/play_parkour_adam_sp.sh --viewer viser --load-run <run>
-#   ./scripts/play_parkour_adam_sp.sh --gpu 0 --load-run <run>   # 仅使用第 0 张卡
+#   ./scripts/play_parkour_adam_lite.sh --load-run <run>
+#   ./scripts/play_parkour_adam_lite.sh --viewer viser --load-run <run>
+#   ./scripts/play_parkour_adam_lite.sh --gpu 0 --load-run <run>   # 仅使用第 0 张卡
 #
 # 说明:
 #   - 设置 PYTHONWARNINGS=ignore，屏蔽 Python warnings 模块发出的告警。
-#   - stdout/stderr 经 filter：与 train_parkour_adam_sp.sh 相同的 MuJoCo 刷屏行过滤，
+#   - stdout/stderr 经 filter：与 train_parkour_adam_lite.sh 相同的 MuJoCo 刷屏行过滤，
 #     再过滤常见 Python / PyTorch 等 warning 行。
 #
 
 set -e
 
-TASK_ID="Instinct-Parkour-Adam-SP-Play-v0"
+TASK_ID="Instinct-Parkour-Adam-Lite-Play-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CUDA_VISIBLE_DEVICES_VAL="${CUDA_VISIBLE_DEVICES:-}"
@@ -56,7 +56,7 @@ fi
 PLAY_CMD+=("$TASK_ID")
 PLAY_CMD+=("${EXTRA_ARGS[@]}")
 
-# 与 scripts/train_parkour_adam_sp.sh 一致：MuJoCo 刷屏（可走 stdout/stderr；torchrunx 行前缀不影响行内匹配）。
+# 与 scripts/train_parkour_adam_lite.sh 一致：MuJoCo 刷屏（可走 stdout/stderr；torchrunx 行前缀不影响行内匹配）。
 # 再叠加 play 侧对通用 warning 文案的过滤。
 filter_output() {
   grep --line-buffered -vE \
