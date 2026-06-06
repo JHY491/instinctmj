@@ -235,6 +235,16 @@ adam_lite_delayed_actuator_cfgs: tuple[ActuatorCfg, ...] = (
     ADAM_LITE_ARM_ELBOW_ACTUATOR,
 )
 
+beyondmimic_action_scale: dict[str, float] = {}
+for actuator_cfg in adam_lite_delayed_actuator_cfgs:
+  base_cfg = actuator_cfg.base_cfg
+  effort = base_cfg.effort_limit
+  stiffness = base_cfg.stiffness
+  if effort is None or stiffness == 0.0:
+    continue
+  for joint_expr in base_cfg.target_names_expr:
+    beyondmimic_action_scale[joint_expr] = 0.25 * effort / stiffness
+
 ##
 # Keyframe config.
 ##
@@ -349,6 +359,7 @@ __all__ = [
     "adam_lite_symmetric_augmentation_joint_mapping",
     "adam_lite_symmetric_augmentation_joint_reverse_buf",
     "adam_lite_delayed_actuator_cfgs",
+    "beyondmimic_action_scale",
     "get_spec",
     "get_assets",
 ]

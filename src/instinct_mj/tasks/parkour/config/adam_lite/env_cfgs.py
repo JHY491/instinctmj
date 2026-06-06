@@ -21,7 +21,7 @@ from mjlab.utils.noise import UniformNoiseCfg
 from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_mdp
-from instinct_mj.assets.adam_lite import ADAM_LITE_ROBOT_CFG
+from instinct_mj.assets.adam_lite import ADAM_LITE_ROBOT_CFG, beyondmimic_action_scale
 
 
 def adam_sp_flat_parkour_env_cfg(*, play: bool = False, has_state_estimation: bool = True) -> ManagerBasedRlEnvCfg:
@@ -49,7 +49,7 @@ def adam_sp_flat_parkour_env_cfg(*, play: bool = False, has_state_estimation: bo
       "joint_pos": JointPositionActionCfg(
         entity_name="robot",
         actuator_names=(".*",),
-        scale=0.5,
+        scale=copy.deepcopy(beyondmimic_action_scale),
         use_default_offset=True,
       ),
     },
