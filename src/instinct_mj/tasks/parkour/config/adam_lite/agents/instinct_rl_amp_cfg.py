@@ -118,3 +118,13 @@ class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
 def adam_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """Adam SP parkour AMP runner config with depth vision encoder."""
     return AdamSPParkourVisionAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteThreeSlopesParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_slopes_parkour"
+
+
+def adam_lite_three_slopes_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """AMP runner for three-slope parkour (separate log dir from stairs/default parkour)."""
+    return AdamLiteThreeSlopesParkourVisionAmpRunnerCfg()

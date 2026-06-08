@@ -228,6 +228,53 @@ def _resolve_tracking_motion(_task_id: str, cfg: TrainConfig) -> str | None:
     raise ValueError("Tracking training requires a motion file.\n  --motion-file /path/to/motion.npz")
 
 
+def _try_direct_checkpoint_path(load_run: str | None, load_checkpoint: str | None) -> Path | None:
+    """Return an existing checkpoint file when resume args point directly at a ``.pt`` path."""
+    for raw in (load_checkpoint, load_run):
+        if raw in (None, ""):
+            continue
+        candidate = Path(raw).expanduser()
+        if candidate.is_file():
+            return candidate.resolve()
+        resolved = candidate.resolve()
+        if resolved.is_file():
+            return resolved
+    return None
+
+
+def _resolve_resume_checkpoint_path(
+    *,
+    log_root_path: Path,
+    load_run: str | None,
+    load_checkpoint: str | None,
+) -> Path:
+    direct = _try_direct_checkpoint_path(load_run, load_checkpoint)
+    if direct is not None:
+        return direct
+
+    load_run_path = Path(load_run).expanduser() if load_run else None
+    if load_run_path is not None and load_run_path.is_absolute() and load_run_path.is_dir():
+        return get_checkpoint_path(
+            log_path=load_run_path.parent,
+            run_dir=load_run_path.name,
+            checkpoint=load_checkpoint or "model_.*.pt",
+        )
+
+    return get_checkpoint_path(
+        log_path=log_root_path,
+        run_dir=load_run or ".*",
+        checkpoint=load_checkpoint or "model_.*.pt",
+    )
+
+
+def _maybe_auto_enable_resume(cfg: TrainConfig) -> None:
+    if cfg.agent.resume:
+        return
+    if _try_direct_checkpoint_path(cfg.agent.load_run, cfg.agent.load_checkpoint) is not None:
+        cfg.agent.resume = True
+        print("[INFO] Auto-enabled --agent.resume from direct .pt checkpoint path.")
+
+
 def _resolve_device(cfg: TrainConfig) -> str:
     if cfg.device is not None:
         return cfg.device
@@ -485,20 +532,11 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     runner.add_git_repo_to_log(__file__)
 
     if cfg.agent.resume:
-        log_root_path = log_dir.parent
-        load_run = Path(cfg.agent.load_run).expanduser() if cfg.agent.load_run else None
-        if load_run is not None and load_run.is_absolute():
-            resume_path = get_checkpoint_path(
-                log_path=load_run.parent,
-                run_dir=load_run.name,
-                checkpoint=cfg.agent.load_checkpoint,
-            )
-        else:
-            resume_path = get_checkpoint_path(
-                log_path=log_root_path,
-                run_dir=cfg.agent.load_run,
-                checkpoint=cfg.agent.load_checkpoint,
-            )
+        resume_path = _resolve_resume_checkpoint_path(
+            log_root_path=log_dir.parent,
+            load_run=cfg.agent.load_run,
+            load_checkpoint=cfg.agent.load_checkpoint,
+        )
         print(f"[INFO] Resuming from checkpoint: {resume_path}")
         runner.load(str(resume_path))
 
@@ -559,6 +597,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
 def launch_training(task_id: str, args: TrainConfig | None = None) -> None:
     args = args or TrainConfig.from_task(task_id)
+    _maybe_auto_enable_resume(args)
     log_root_path = Path("logs") / "instinct_rl" / args.agent.experiment_name
     log_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if args.agent.run_name:

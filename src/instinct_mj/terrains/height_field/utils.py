@@ -91,12 +91,12 @@ def height_field_to_mesh(func: Callable) -> Callable:
                 f" horizontal scale ({cfg.horizontal_scale})."
             )
 
-        width_pixels = int(cfg.size[0] / cfg.horizontal_scale) + 1
-        length_pixels = int(cfg.size[1] / cfg.horizontal_scale) + 1
+        width_pixels = int(cfg.size[1] / cfg.horizontal_scale) + 1
+        length_pixels = int(cfg.size[0] / cfg.horizontal_scale) + 1
         border_pixels = int(cfg.border_width / cfg.horizontal_scale) + 1
         heights = np.zeros((width_pixels, length_pixels), dtype=np.int16)
 
-        sub_terrain_size = [width_pixels - 2 * border_pixels, length_pixels - 2 * border_pixels]
+        sub_terrain_size = [length_pixels - 2 * border_pixels, width_pixels - 2 * border_pixels]
         sub_terrain_size = [dim * cfg.horizontal_scale for dim in sub_terrain_size]
 
         terrain_size = copy.deepcopy(cfg.size)
@@ -110,11 +110,11 @@ def height_field_to_mesh(func: Callable) -> Callable:
         )
         mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
 
-        x1 = int((cfg.size[0] * 0.5 - 1) / cfg.horizontal_scale)
-        x2 = int((cfg.size[0] * 0.5 + 1) / cfg.horizontal_scale)
-        y1 = int((cfg.size[1] * 0.5 - 1) / cfg.horizontal_scale)
-        y2 = int((cfg.size[1] * 0.5 + 1) / cfg.horizontal_scale)
-        origin_z = np.max(heights[x1:x2, y1:y2]) * cfg.vertical_scale
+        col1 = int((cfg.size[0] * 0.5 - 1) / cfg.horizontal_scale)
+        col2 = int((cfg.size[0] * 0.5 + 1) / cfg.horizontal_scale)
+        row1 = int((cfg.size[1] * 0.5 - 1) / cfg.horizontal_scale)
+        row2 = int((cfg.size[1] * 0.5 + 1) / cfg.horizontal_scale)
+        origin_z = np.max(heights[row1:row2, col1:col2]) * cfg.vertical_scale
         origin = np.array([0.5 * cfg.size[0], 0.5 * cfg.size[1], origin_z])
 
         return [mesh], origin
@@ -141,22 +141,22 @@ def convert_height_field_to_mesh(
         move_x = np.zeros((num_rows, num_cols))
         move_y = np.zeros((num_rows, num_cols))
         move_corners = np.zeros((num_rows, num_cols))
-        move_x[: num_rows - 1, :] += hf[1:num_rows, :] - hf[: num_rows - 1, :] > slope_threshold
-        move_x[1:num_rows, :] -= hf[: num_rows - 1, :] - hf[1:num_rows, :] > slope_threshold
-        move_y[:, : num_cols - 1] += hf[:, 1:num_cols] - hf[:, : num_cols - 1] > slope_threshold
-        move_y[:, 1:num_cols] -= hf[:, : num_cols - 1] - hf[:, 1:num_cols] > slope_threshold
+        move_y[: num_rows - 1, :] += hf[1:num_rows, :] - hf[: num_rows - 1, :] > slope_threshold
+        move_y[1:num_rows, :] -= hf[: num_rows - 1, :] - hf[1:num_rows, :] > slope_threshold
+        move_x[:, : num_cols - 1] += hf[:, 1:num_cols] - hf[:, : num_cols - 1] > slope_threshold
+        move_x[:, 1:num_cols] -= hf[:, : num_cols - 1] - hf[:, 1:num_cols] > slope_threshold
         move_corners[: num_rows - 1, : num_cols - 1] += (
             hf[1:num_rows, 1:num_cols] - hf[: num_rows - 1, : num_cols - 1] > slope_threshold
         )
         move_corners[1:num_rows, 1:num_cols] -= (
             hf[: num_rows - 1, : num_cols - 1] - hf[1:num_rows, 1:num_cols] > slope_threshold
         )
-        xx += (move_x + move_corners * (move_x == 0)) * horizontal_scale
-        yy += (move_y + move_corners * (move_y == 0)) * horizontal_scale
+        xx += (move_y + move_corners * (move_y == 0)) * horizontal_scale
+        yy += (move_x + move_corners * (move_x == 0)) * horizontal_scale
 
     vertices = np.zeros((num_rows * num_cols, 3), dtype=np.float32)
-    vertices[:, 0] = xx.flatten()
-    vertices[:, 1] = yy.flatten()
+    vertices[:, 0] = yy.flatten()
+    vertices[:, 1] = xx.flatten()
     vertices[:, 2] = hf.flatten() * vertical_scale
 
     triangles = -np.ones((2 * (num_rows - 1) * (num_cols - 1), 3), dtype=np.uint32)

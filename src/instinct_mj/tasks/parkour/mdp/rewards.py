@@ -61,10 +61,63 @@ def ang_vel_z_excess_when_no_yaw_cmd(
     return torch.square(excess) * no_yaw_cmd.float()
 
 
-def heading_error(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
-    """Compute heading command magnitude."""
+def ang_vel_z_random_velocity_band(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    cmd_epsilon: float = 0.1,
+    slow_tolerance: float = 0.2,
+    fast_tolerance: float = 0.25,
+    std: float = 0.25,
+) -> torch.Tensor:
+    """Reward keeping stand random-spin ωz within a band around the sampled command.
+
+    Only active on ``random_velocity_indices`` envs (e.g. ``perlin_rough_stand``) with
+    |ωz_cmd| > cmd_epsilon. Inside the [slow_tolerance, fast_tolerance] band the reward
+    is 1.0; outside it decays as exp(-violation² / std²). Use a positive reward weight.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    cmd_z = env.command_manager.get_command(command_name)[:, 2]
+    actual_z = asset.data.root_link_ang_vel_b[:, 2]
+
+    cmd_term = env.command_manager.get_term(command_name)
+    random_mask = getattr(cmd_term, "random_velocity_indices", None)
+    if random_mask is None:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    active = random_mask & (torch.abs(cmd_z) > cmd_epsilon)
+    mag_cmd = torch.abs(cmd_z)
+    mag_act = torch.abs(actual_z)
+    sign_match = cmd_z * actual_z > 0.0
+
+    slow_excess = torch.clamp(mag_cmd - slow_tolerance - mag_act, min=0.0)
+    fast_excess = torch.clamp(mag_act - mag_cmd - fast_tolerance, min=0.0)
+    violation_sq = torch.square(slow_excess) + torch.square(fast_excess)
+    band_reward = torch.exp(-violation_sq / std**2)
+    misalign_reward = torch.exp(-torch.square(actual_z - cmd_z) / std**2)
+    reward = torch.where(sign_match, band_reward, misalign_reward)
+
+    return reward * active.float()
+
+
+def heading_error(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    skip_random_velocity: bool = True,
+) -> torch.Tensor:
+    """Penalize yaw velocity command magnitude (|ωz_cmd|).
+
+    Random-velocity envs (e.g. ``perlin_rough_stand``) sample ωz directly; skip there so
+    in-place spins are not penalized for holding a sampled spin rate command.
+    """
     command = env.command_manager.get_command(command_name)
-    return torch.abs(command[:, 2])
+    penalty = torch.abs(command[:, 2])
+    if skip_random_velocity:
+        cmd_term = env.command_manager.get_term(command_name)
+        random_mask = getattr(cmd_term, "random_velocity_indices", None)
+        if random_mask is not None:
+            penalty = penalty * (~random_mask).float()
+    return penalty
 
 
 def dont_wait(

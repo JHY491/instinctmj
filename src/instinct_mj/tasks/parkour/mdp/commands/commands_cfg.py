@@ -51,6 +51,9 @@ class PoseVelocityCommandCfg(CommandTermCfg):
     ang_vel_threshold: float = 0.15
     """Minimal threshold for the angular velocity command (in rad/s)."""
 
+    yaw_vel_gate_threshold: float | None = None
+    """If set, linear velocity is zeroed when |heading_command_w| exceeds this threshold (rad)."""
+
     lin_vel_metrics_std: float = 0.5
     """Standard deviation for the linear velocity metrics."""
 
@@ -60,11 +63,47 @@ class PoseVelocityCommandCfg(CommandTermCfg):
     rel_standing_envs: float = 0.0
     """The sampled probability of environments that should be standing still. Defaults to 0.0."""
 
-    target_dis_threshold: float = 0.2
-    """The distance threshold to the target position below which the command is set to zero. Defaults to 0.2."""
+    target_dis_threshold: float = 0.4
+    """The distance threshold to the target position below which the command is set to zero. Defaults to 0.4."""
 
     patch_vis: bool = False
-    """Whether to visualize all flat patches (can be expensive with many patches)."""
+    """If True, draw flat-patch candidates (same markers as ``show_flat_patch_candidates``). Kept for compatibility."""
+
+    show_flat_patch_candidates: bool = True
+    """When True and command ``debug_vis`` is on, draw ``terrain.flat_patches[\"target\"]`` for this env's cell."""
+
+    flat_patch_target_count: int | None = None
+    """If set, draw at most this many candidate patches (index order). Use for fixed-length targets (e.g. 4)."""
+
+    flat_patch_random_index: bool = True
+    """If True (default), pick a random patch index on each flat-patch resample. If False, always use index 0."""
+
+    flat_patch_advance_on_arrival: bool = False
+    """If True, advance patch index on arrival for columns using ``FixedSequenceFlatPatchSamplingCfg``."""
+
+    flat_patch_arrival_xy_dist: float = 0.4
+    """Horizontal distance threshold (m) for flat-patch arrival."""
+
+    flat_patch_arrival_hold_steps: int = 3
+    """Consecutive steps within ``flat_patch_arrival_xy_dist`` before advancing to the next patch."""
+
+    flat_patch_resample_velocity_on_advance: bool = True
+    """If True, call velocity resampling when advancing to the next flat-patch target."""
+
+    guided_waypoints_local: dict[str, list[tuple[float, float, float]]] | None = None
+    """Per sub-terrain name, waypoints in the sub-terrain cell frame (add cell world origin)."""
+
+    guided_arrival_xy_dist: float = 0.35
+    """Advance to the next waypoint when horizontal distance falls below this value."""
+
+    guided_arrival_hold_steps: int = 3
+    """Consecutive steps within ``guided_arrival_xy_dist`` required before advancing."""
+
+    guided_loop_waypoints: bool = True
+    """If True, wrap to the first waypoint after the last; otherwise stay on the last point."""
+
+    guided_resample_velocity_on_advance: bool = True
+    """If True, re-sample velocity limits when advancing to the next waypoint."""
 
     def build(self, env):
         return PoseVelocityCommand(self, env)

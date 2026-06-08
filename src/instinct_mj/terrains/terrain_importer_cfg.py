@@ -15,7 +15,13 @@ class TerrainImporterCfg(TerrainEntityCfgBase):
     """The inherited class to use for the terrain importer."""
 
     virtual_obstacles: dict[str, VirtualObstacleCfg] = field(default_factory=dict)
-    """The virtual obstacles to use for the terrain importer."""
+    """Named virtual obstacle generators.
+
+    When any sub-terrain sets ``virtual_obstacle_keys``, only tiles that list a key
+    contribute mesh to that obstacle; other tiles are skipped. Sub-terrains with an
+    empty tuple contribute nothing. If no sub-terrain sets ``virtual_obstacle_keys``,
+    every obstacle is built from the full concatenated terrain mesh (legacy behavior).
+    """
 
     virtual_obstacle_source: Literal["mesh", "heightfield"] = "mesh"
     """Source used to generate virtual obstacles.

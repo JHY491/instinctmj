@@ -25,7 +25,7 @@ _COACD_LOG_LEVEL_SET: str | None = None
 # In-memory cache for hfield height arrays keyed by (abspath, st_size, st_mtime_ns, resolution, size_x, size_y).
 # Avoids re-running ray-casting when the same STL is used across multiple terrain tiles.
 _HFIELD_HEIGHT_CACHE: dict[tuple, np.ndarray] = {}
-_HFIELD_CACHE_VERSION = 4
+_HFIELD_CACHE_VERSION = 5
 _HFIELD_RAYCAST_EXECUTORS: dict[int, ProcessPoolExecutor] = {}
 
 import mujoco
@@ -1025,11 +1025,11 @@ def _add_collision_hfield_from_mesh(
     if resolution <= 0.0:
         raise ValueError("collision_hfield_resolution must be greater than zero.")
 
-    nrow = max(int(np.round(cfg.size[0] / resolution)) + 1, 2)
-    ncol = max(int(np.round(cfg.size[1] / resolution)) + 1, 2)
-    x = np.linspace(0.0, cfg.size[0], nrow, dtype=np.float64)
-    y = np.linspace(0.0, cfg.size[1], ncol, dtype=np.float64)
-    xx, yy = np.meshgrid(x, y, indexing="ij")
+    nrow = max(int(np.round(cfg.size[1] / resolution)) + 1, 2)
+    ncol = max(int(np.round(cfg.size[0] / resolution)) + 1, 2)
+    x = np.linspace(0.0, cfg.size[0], ncol, dtype=np.float64)
+    y = np.linspace(0.0, cfg.size[1], nrow, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y, indexing="xy")
 
     # Build ray origins above the mesh AABB and shoot downward.
     mesh_z_max = float(terrain_mesh.bounds[1, 2])
@@ -1235,11 +1235,11 @@ def _create_visual_hfield_from_mesh(
     if resolution <= 0.0:
         raise ValueError("hfield_resolution must be greater than zero.")
 
-    nrow = max(int(np.round(cfg.size[0] / resolution)) + 1, 2)
-    ncol = max(int(np.round(cfg.size[1] / resolution)) + 1, 2)
-    x = np.linspace(0.0, cfg.size[0], nrow, dtype=np.float64)
-    y = np.linspace(0.0, cfg.size[1], ncol, dtype=np.float64)
-    xx, yy = np.meshgrid(x, y, indexing="ij")
+    nrow = max(int(np.round(cfg.size[1] / resolution)) + 1, 2)
+    ncol = max(int(np.round(cfg.size[0] / resolution)) + 1, 2)
+    x = np.linspace(0.0, cfg.size[0], ncol, dtype=np.float64)
+    y = np.linspace(0.0, cfg.size[1], nrow, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y, indexing="xy")
 
     mesh_z_max = float(terrain_mesh.bounds[1, 2])
     mesh_z_min = float(terrain_mesh.bounds[0, 2])
@@ -1675,7 +1675,7 @@ def floating_box_terrain(difficulty: float, cfg: object) -> tuple[list[trimesh.T
         meshes_list.append(ground_mesh)
     else:
         clean_ground_height_field = np.zeros(
-            (int(cfg.size[0] / cfg.horizontal_scale) + 1, int(cfg.size[1] / cfg.horizontal_scale) + 1), dtype=np.int16
+            (int(cfg.size[1] / cfg.horizontal_scale) + 1, int(cfg.size[0] / cfg.horizontal_scale) + 1), dtype=np.int16
         )
         perlin_cfg = cfg.perlin_cfg
         perlin_cfg.size = cfg.size
@@ -1700,8 +1700,8 @@ def floating_box_terrain(difficulty: float, cfg: object) -> tuple[list[trimesh.T
             box_width_start_px = int((cfg.size[0] - box_width) / 2 / cfg.horizontal_scale)
             box_length_start_px = int((cfg.size[1] - box_length) / 2 / cfg.horizontal_scale)
             perlin_noise[
-                box_width_start_px : box_width_start_px + box_width_px,
                 box_length_start_px : box_length_start_px + box_length_px,
+                box_width_start_px : box_width_start_px + box_width_px,
             ] = 0
         ground_height_field = clean_ground_height_field + perlin_noise
         # convert to trimesh
@@ -1768,7 +1768,7 @@ def random_multi_box_terrain(difficulty: float, cfg: object) -> tuple[list[trime
         mesh_list.append(ground_mesh)
     else:
         clean_ground_height_field = np.zeros(
-            (int(cfg.size[0] / cfg.horizontal_scale) + 1, int(cfg.size[1] / cfg.horizontal_scale) + 1), dtype=np.int16
+            (int(cfg.size[1] / cfg.horizontal_scale) + 1, int(cfg.size[0] / cfg.horizontal_scale) + 1), dtype=np.int16
         )
         perlin_cfg = cfg.perlin_cfg
         perlin_cfg.size = cfg.size

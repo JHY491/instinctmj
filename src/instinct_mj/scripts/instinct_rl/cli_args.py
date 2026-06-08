@@ -24,8 +24,18 @@ def add_instinct_rl_args(parser: argparse.ArgumentParser):
     arg_group.add_argument("--run_name", type=str, default=None, help="Run name suffix to the log directory.")
     # -- load arguments
     arg_group.add_argument("--resume", default=None, action="store_true", help="Whether to resume from a checkpoint.")
-    arg_group.add_argument("--load_run", type=str, default=None, help="Name of the run folder to resume from.")
-    arg_group.add_argument("--checkpoint", type=str, default=None, help="Checkpoint file to resume from.")
+    arg_group.add_argument(
+        "--load_run",
+        type=str,
+        default=None,
+        help="Run folder name, run directory path, or direct path to a .pt checkpoint.",
+    )
+    arg_group.add_argument(
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Checkpoint filename, regex, or direct path to a .pt file.",
+    )
     # # -- logger arguments
     # arg_group.add_argument(
     #     "--logger", type=str, default=None, choices={"wandb", "tensorboard", "neptune"}, help="Logger module to use."

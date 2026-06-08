@@ -13,6 +13,10 @@ from mjlab.utils.lab_api.math import wrap_to_pi, yaw_quat
 
 from instinct_mj.managers import CommandTerm
 from instinct_mj.terrains import TerrainImporter
+from instinct_mj.terrains.height_field.hf_terrains_cfg import (
+    terrain_column_fixed_sequence_reset_patch_index,
+    terrain_column_target_uses_fixed_sequence_flat_patch,
+)
 
 if TYPE_CHECKING:
     from mjlab.entity import Entity
@@ -127,8 +131,40 @@ class PoseVelocityCommand(CommandTerm):
                 "The terrain-based command generator requires a valid flat patch under 'target' in the terrain."
                 f" Found: {list(self.terrain.flat_patches.keys())}"
             )
-        # valid targets: (terrain_level, terrain_type, num_patches, 3)
-        self.valid_targets: torch.Tensor = self.terrain.flat_patches["target"]
+        # valid targets: (terrain_level, terrain_type, num_patches, 3) — ignore optional yaw slot
+        targets = self.terrain.flat_patches["target"]
+        self.valid_targets = targets[..., :3] if targets.shape[-1] > 3 else targets
+        self._flat_patch_idx = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self._flat_patch_arrival_hold = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self._flat_patch_seq_terminal = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        fnv = getattr(self.terrain, "flat_patch_num_valid", None)
+        self._flat_patch_num_valid: torch.Tensor | None = None
+        if isinstance(fnv, dict) and "target" in fnv:
+            self._flat_patch_num_valid = fnv["target"]
+
+        ncol = int(self.valid_targets.shape[1])
+        tgen = getattr(self.terrain.cfg, "terrain_generator", None)
+        col_flags = terrain_column_target_uses_fixed_sequence_flat_patch(tgen)
+        col_reset_idx = terrain_column_fixed_sequence_reset_patch_index(tgen)
+        if len(col_flags) != ncol:
+            if len(col_flags) < ncol:
+                col_flags = col_flags + [False] * (ncol - len(col_flags))
+            else:
+                col_flags = col_flags[:ncol]
+        if len(col_reset_idx) != ncol:
+            if len(col_reset_idx) < ncol:
+                col_reset_idx = col_reset_idx + [0] * (ncol - len(col_reset_idx))
+            else:
+                col_reset_idx = col_reset_idx[:ncol]
+        self._flat_patch_target_fixed_sequence_by_col = torch.tensor(col_flags, dtype=torch.bool, device=self.device)
+        self._flat_patch_reset_index_by_col = torch.tensor(col_reset_idx, dtype=torch.long, device=self.device)
+
+        self._guided_mode: bool = False
+        self._guided_world: torch.Tensor | None = None
+        self._guided_counts: torch.Tensor | None = None
+        self._guided_wp_idx = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self._guided_arrival_hold = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self._init_guided_waypoints()
 
     def __str__(self) -> str:
         msg = "PositionCommand:\n"
@@ -153,6 +189,295 @@ class PoseVelocityCommand(CommandTerm):
     """
     Implementation specific functions.
     """
+
+    def _init_guided_waypoints(self) -> None:
+        """Build world-frame waypoint tables from sub-terrain-local poses plus ``terrain_origins``."""
+        guided = self.cfg.guided_waypoints_local
+        if guided is None or len(guided) == 0:
+            return
+
+        terr_orig = getattr(self.terrain, "terrain_origins", None)
+        if terr_orig is None:
+            raise RuntimeError("guided_waypoints_local requires scene terrain with ``terrain_origins`` populated.")
+        if isinstance(terr_orig, torch.Tensor):
+            terr_orig_np = terr_orig.detach().cpu().numpy()
+        else:
+            terr_orig_np = np.asarray(terr_orig)
+        if terr_orig_np.ndim != 3 or terr_orig_np.shape[2] != 3:
+            raise RuntimeError(
+                "guided_waypoints_local expects ``terrain_origins`` shaped (num_rows, num_cols, 3). "
+                f"Got shape {terr_orig_np.shape}."
+            )
+
+        terrain_generator_cfg = self.terrain.cfg.terrain_generator
+        if terrain_generator_cfg is None:
+            raise RuntimeError("guided_waypoints_local requires a terrain_generator on the terrain config.")
+
+        proportions = np.array([sub_cfg.proportion for sub_cfg in terrain_generator_cfg.sub_terrains.values()])
+        proportions /= np.sum(proportions)
+        sub_indices: list[int] = []
+        for index in range(terrain_generator_cfg.num_cols):
+            sub_index = int(np.min(np.where(index / terrain_generator_cfg.num_cols + 0.001 < np.cumsum(proportions))[0]))
+            sub_indices.append(sub_index)
+        sub_terrains_names = list(terrain_generator_cfg.sub_terrains.keys())
+
+        for key in guided:
+            if key not in sub_terrains_names:
+                raise RuntimeError(
+                    f"guided_waypoints_local key {key!r} is not a sub_terrain name. "
+                    f"Valid names: {sub_terrains_names}"
+                )
+            if len(guided[key]) == 0:
+                raise RuntimeError(f"guided_waypoints_local[{key!r}] must be a non-empty list of (x, y, z) tuples.")
+
+        nrow, ncol = int(terr_orig_np.shape[0]), int(terr_orig_np.shape[1])
+        max_wp = max(len(pts) for pts in guided.values())
+        terr_orig_t = torch.as_tensor(terr_orig_np, dtype=torch.float32, device=self.device)
+
+        guided_world = torch.zeros(nrow, ncol, max_wp, 3, dtype=torch.float32, device=self.device)
+        guided_counts = torch.zeros(nrow, ncol, dtype=torch.long, device=self.device)
+
+        for col in range(ncol):
+            name = sub_terrains_names[sub_indices[col]]
+            pts = guided.get(name)
+            if pts is None:
+                continue
+            local = torch.tensor(pts, dtype=torch.float32, device=self.device)
+            n = int(local.shape[0])
+            for level in range(nrow):
+                origin = terr_orig_t[level, col]
+                guided_world[level, col, :n] = local + origin
+                guided_counts[level, col] = n
+
+        self._guided_mode = True
+        self._guided_world = guided_world
+        self._guided_counts = guided_counts
+
+    def _guided_counts_at_envs(self, env_ids: torch.Tensor) -> torch.Tensor:
+        assert self._guided_counts is not None
+        levels = self.terrain.terrain_levels[env_ids]
+        cols = self.terrain.terrain_types[env_ids]
+        return self._guided_counts[levels, cols]
+
+    def _velocity_stop_xy_dist(self) -> torch.Tensor:
+        """Per-env distance below which linear/angular commands are zeroed.
+
+        Guided columns use ``guided_arrival_xy_dist`` so the robot is not frozen
+        outside the waypoint arrival radius (``target_dis_threshold`` alone can
+        be larger and block ever reaching ``guided_arrival_xy_dist``).
+        """
+        stop = torch.full(
+            (self.num_envs,),
+            self.cfg.target_dis_threshold,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        if self._guided_mode and self._guided_counts is not None:
+            env_all = torch.arange(self.num_envs, device=self.device)
+            guided_active = self._guided_counts_at_envs(env_all) > 0
+            stop = torch.where(
+                guided_active,
+                torch.full_like(stop, self.cfg.guided_arrival_xy_dist),
+                stop,
+            )
+        return stop
+
+    def _set_guided_positions(self, env_ids: Sequence[int], *, reset_index: bool) -> None:
+        assert self._guided_world is not None
+        ids_t = torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
+        if ids_t.numel() == 0:
+            return
+        if reset_index:
+            self._guided_wp_idx[ids_t] = 0
+        levels = self.terrain.terrain_levels[ids_t]
+        cols = self.terrain.terrain_types[ids_t]
+        wp_i = self._guided_wp_idx[ids_t]
+        self.pos_command_w[ids_t] = self._guided_world[levels, cols, wp_i]
+
+    def _nv_vec_for_envs(self, ids_t: torch.Tensor) -> torch.Tensor:
+        max_np = int(self.valid_targets.shape[2])
+        levels = self.terrain.terrain_levels[ids_t]
+        tts = self.terrain.terrain_types[ids_t]
+        if self._flat_patch_num_valid is not None:
+            return self._flat_patch_num_valid[levels, tts].clamp(min=1, max=max_np)
+        return torch.full((ids_t.shape[0],), max_np, device=self.device, dtype=torch.long)
+
+    def _flat_patch_arrival_sequence_eligible(self) -> torch.Tensor:
+        """Per env: True when ``flat_patch_advance_on_arrival`` applies (fixed-sequence target column, not guided)."""
+        if not self.cfg.flat_patch_advance_on_arrival:
+            return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        env_all = torch.arange(self.num_envs, device=self.device)
+        cols = self.terrain.terrain_types[env_all]
+        by_col = self._flat_patch_target_fixed_sequence_by_col[cols]
+        if not self._guided_mode or self._guided_counts is None:
+            return by_col
+        gc = self._guided_counts_at_envs(env_all)
+        return by_col & (gc <= 0)
+
+    def _sample_flat_patch_positions(self, env_ids: Sequence[int], *, force_restart: bool = False) -> None:
+        ids_t = torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
+        if ids_t.numel() == 0:
+            return
+        max_np = int(self.valid_targets.shape[2])
+        if max_np <= 0:
+            return
+        levels = self.terrain.terrain_levels[ids_t]
+        tts = self.terrain.terrain_types[ids_t]
+        nv_vec = self._nv_vec_for_envs(ids_t)
+        if force_restart:
+            reset_ep = torch.ones(ids_t.shape[0], dtype=torch.bool, device=self.device)
+        else:
+            reset_ep = self._env.episode_length_buf[ids_t] <= 1
+        self._flat_patch_seq_terminal[ids_t] = torch.where(
+            reset_ep, torch.zeros_like(self._flat_patch_seq_terminal[ids_t]), self._flat_patch_seq_terminal[ids_t]
+        )
+        self._flat_patch_arrival_hold[ids_t] = torch.where(
+            reset_ep, torch.zeros_like(self._flat_patch_arrival_hold[ids_t]), self._flat_patch_arrival_hold[ids_t]
+        )
+
+        use_seq = self.cfg.flat_patch_advance_on_arrival & self._flat_patch_target_fixed_sequence_by_col[tts]
+        if self.cfg.flat_patch_advance_on_arrival:
+            term = self._flat_patch_seq_terminal[ids_t]
+            ids_last = nv_vec - 1
+            kept = self._flat_patch_idx[ids_t]
+            reset_idx = self._flat_patch_reset_index_by_col[tts].clamp(min=0)
+            reset_idx = torch.minimum(reset_idx, torch.clamp(nv_vec - 1, min=0))
+            ids_seq_start = torch.where(use_seq, reset_idx, torch.zeros_like(nv_vec))
+            # Episode start: per-column reset index (e.g. far stair low). After final patch: stay on last.
+            ids_seq = torch.where(reset_ep, ids_seq_start, torch.where(term, ids_last, kept))
+        else:
+            ids_seq = torch.zeros(ids_t.shape[0], dtype=torch.long, device=self.device)
+
+        if self.cfg.flat_patch_random_index:
+            u = torch.rand(ids_t.shape[0], device=self.device)
+            ids_rand = (u * nv_vec.to(dtype=torch.float32)).floor().to(torch.long)
+            ids_rand = torch.minimum(ids_rand, nv_vec - 1)
+        else:
+            ids_rand = torch.zeros(ids_t.shape[0], dtype=torch.long, device=self.device)
+
+        ids = torch.where(use_seq, ids_seq, ids_rand)
+        self._flat_patch_idx[ids_t] = ids
+        self.pos_command_w[ids_t] = self.valid_targets[levels, tts, ids]
+
+    def _maybe_advance_flat_patch_by_arrival(self) -> None:
+        if not self.cfg.flat_patch_advance_on_arrival:
+            return
+        env_all = torch.arange(self.num_envs, device=self.device)
+        use_flat = self._flat_patch_arrival_sequence_eligible()
+        nv_vec = self._nv_vec_for_envs(env_all)
+        active = use_flat & (nv_vec > 0)
+        if not bool(active.any()):
+            return
+
+        target_xy = self.pos_command_w[:, :2]
+        robot_xy = self.robot.data.root_link_pos_w[:, :2]
+        dist = torch.norm(robot_xy - target_xy, dim=1)
+        near = active & ~self._flat_patch_seq_terminal & (dist <= self.cfg.flat_patch_arrival_xy_dist)
+        self._flat_patch_arrival_hold = torch.where(
+            near,
+            self._flat_patch_arrival_hold + 1,
+            torch.zeros_like(self._flat_patch_arrival_hold),
+        )
+        advance = active & (self._flat_patch_arrival_hold >= self.cfg.flat_patch_arrival_hold_steps)
+        env_ids = advance.nonzero(as_tuple=False).flatten()
+        if env_ids.numel() == 0:
+            return
+
+        levels = self.terrain.terrain_levels[env_ids]
+        tts = self.terrain.terrain_types[env_ids]
+        last_i = nv_vec[env_ids] - 1
+        cur = self._flat_patch_idx[env_ids]
+        not_last = cur < last_i
+        self._flat_patch_idx[env_ids] = torch.where(not_last, cur + 1, cur)
+        self._flat_patch_seq_terminal[env_ids] = torch.where(~not_last, True, self._flat_patch_seq_terminal[env_ids])
+        new_i = self._flat_patch_idx[env_ids]
+        self.pos_command_w[env_ids] = self.valid_targets[levels, tts, new_i]
+        self._flat_patch_arrival_hold[env_ids] = 0
+
+        if self.cfg.flat_patch_resample_velocity_on_advance:
+            self._resample_velocity_internal([int(i) for i in env_ids.tolist()])
+
+    def _resample_velocity_internal(self, env_ids: Sequence[int]) -> None:
+        ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)
+        if ids_t.numel() == 0:
+            return
+        n = int(ids_t.shape[0])
+        r = torch.empty(n, device=self.device)
+        self.max_command_b[ids_t, 0] = self.lin_vel_x_range[ids_t, 0] + r.uniform_(0.0, 1.0) * (
+            self.lin_vel_x_range[ids_t, 1] - self.lin_vel_x_range[ids_t, 0]
+        )
+        self.max_command_b[ids_t, 1] = self.lin_vel_y_range[ids_t, 0] + r.uniform_(0.0, 1.0) * (
+            self.lin_vel_y_range[ids_t, 1] - self.lin_vel_y_range[ids_t, 0]
+        )
+        self.max_command_b[ids_t, 2] = self.ang_vel_z_range[ids_t, 0] + r.uniform_(0.0, 1.0) * (
+            self.ang_vel_z_range[ids_t, 1] - self.ang_vel_z_range[ids_t, 0]
+        )
+        self.is_standing_env[ids_t] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
+
+        current_batch_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        current_batch_mask[ids_t] = True
+        update_mask = current_batch_mask & self.random_velocity_indices
+        random_velocity_env_ids = update_mask.nonzero(as_tuple=False).flatten()
+
+        if len(random_velocity_env_ids) > 0:
+            self.random_lin_vel_x[random_velocity_env_ids] = self.random_lin_vel_x_range[
+                random_velocity_env_ids, 0
+            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
+                self.random_lin_vel_x_range[random_velocity_env_ids, 1]
+                - self.random_lin_vel_x_range[random_velocity_env_ids, 0]
+            )
+            self.random_lin_vel_y[random_velocity_env_ids] = self.random_lin_vel_y_range[
+                random_velocity_env_ids, 0
+            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
+                self.random_lin_vel_y_range[random_velocity_env_ids, 1]
+                - self.random_lin_vel_y_range[random_velocity_env_ids, 0]
+            )
+            self.random_ang_vel_z[random_velocity_env_ids] = self.random_ang_vel_z_range[
+                random_velocity_env_ids, 0
+            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
+                self.random_ang_vel_z_range[random_velocity_env_ids, 1]
+                - self.random_ang_vel_z_range[random_velocity_env_ids, 0]
+            )
+            self.random_ang_vel_z *= torch.abs(self.random_ang_vel_z) > 0.1
+
+    def _maybe_advance_guided_waypoints(self) -> None:
+        if not self._guided_mode or self._guided_world is None or self._guided_counts is None:
+            return
+
+        env_all = torch.arange(self.num_envs, device=self.device)
+        counts_e = self._guided_counts_at_envs(env_all)
+        active = counts_e > 0
+        if not bool(active.any()):
+            return
+
+        target_xy = self.pos_command_w[:, :2]
+        robot_xy = self.robot.data.root_link_pos_w[:, :2]
+        dist = torch.norm(robot_xy - target_xy, dim=1)
+        near = active & (dist <= self.cfg.guided_arrival_xy_dist)
+        self._guided_arrival_hold = torch.where(
+            near,
+            self._guided_arrival_hold + 1,
+            torch.zeros_like(self._guided_arrival_hold),
+        )
+        advance = active & (self._guided_arrival_hold >= self.cfg.guided_arrival_hold_steps)
+        env_ids = advance.nonzero(as_tuple=False).flatten()
+        if env_ids.numel() == 0:
+            return
+
+        levels = self.terrain.terrain_levels[env_ids]
+        cols = self.terrain.terrain_types[env_ids]
+        counts = self._guided_counts[levels, cols]
+        if self.cfg.guided_loop_waypoints:
+            new_idx = (self._guided_wp_idx[env_ids] + 1) % torch.clamp(counts, min=1)
+        else:
+            new_idx = torch.minimum(self._guided_wp_idx[env_ids] + 1, counts - 1)
+
+        self._guided_wp_idx[env_ids] = new_idx
+        self.pos_command_w[env_ids] = self._guided_world[levels, cols, new_idx]
+        self._guided_arrival_hold[env_ids] = 0
+
+        if self.cfg.guided_resample_velocity_on_advance:
+            self._resample_velocity_internal([int(i) for i in env_ids.tolist()])
 
     def _update_metrics(self):
         # logs data
@@ -189,61 +514,55 @@ class PoseVelocityCommand(CommandTerm):
         self.metrics["random_velocity_env_ratio"] += self.random_velocity_indices.float() / self._env.max_episode_length
 
     def _resample_command(self, env_ids: Sequence[int]):
-        # sample new position targets from the terrain
-        ids = torch.randint(0, self.valid_targets.shape[2], size=(len(env_ids),), device=self.device)
-        self.pos_command_w[env_ids] = self.valid_targets[
-            self.terrain.terrain_levels[env_ids], self.terrain.terrain_types[env_ids], ids
-        ]
+        ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)
+        if ids_t.numel() == 0:
+            return
 
-        # sample velocity commands
-        r = torch.empty(len(env_ids), device=self.device)
-        # -- linear velocity - x direction
-        self.max_command_b[env_ids, 0] = self.lin_vel_x_range[env_ids, 0] + r.uniform_(0.0, 1.0) * (
-            self.lin_vel_x_range[env_ids, 1] - self.lin_vel_x_range[env_ids, 0]
-        )
-        # -- linear velocity - y direction
-        self.max_command_b[env_ids, 1] = self.lin_vel_y_range[env_ids, 0] + r.uniform_(0.0, 1.0) * (
-            self.lin_vel_y_range[env_ids, 1] - self.lin_vel_y_range[env_ids, 0]
-        )
-        # -- ang vel yaw - rotation around z
-        self.max_command_b[env_ids, 2] = self.ang_vel_z_range[env_ids, 0] + r.uniform_(0.0, 1.0) * (
-            self.ang_vel_z_range[env_ids, 1] - self.ang_vel_z_range[env_ids, 0]
-        )
-        # update standing envs
-        self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
+        if self._guided_mode and self._guided_world is not None:
+            counts_e = self._guided_counts_at_envs(ids_t)
+            guided_ok = counts_e > 0
+            if bool((~guided_ok).any()):
+                self._sample_flat_patch_positions([int(i) for i in ids_t[~guided_ok].tolist()])
+        else:
+            self._sample_flat_patch_positions([int(i) for i in ids_t.tolist()])
 
-        # Only update random velocities for envs that are currently being resampled AND are marked for random velocity
-        # Create a mask for the current batch of env_ids
-        current_batch_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        current_batch_mask[env_ids] = True
+        self._resample_velocity_internal([int(i) for i in ids_t.tolist()])
 
-        # Find intersection: envs in this batch that are also random velocity envs
-        update_mask = current_batch_mask & self.random_velocity_indices
-        random_velocity_env_ids = update_mask.nonzero(as_tuple=False).flatten()
+    def reset(self, env_ids: Sequence[int] | None = None) -> dict:
+        """Episode reset: restart flat-patch / guided sequence (``episode_length_buf`` may not be updated yet)."""
+        if env_ids is None:
+            ids_t = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        else:
+            ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)
+        if ids_t.numel() > 0:
+            self._flat_patch_arrival_hold[ids_t] = 0
+            self._flat_patch_seq_terminal[ids_t] = False
+            self._flat_patch_idx[ids_t] = 0
+            if self._guided_mode and self._guided_world is not None:
+                self._guided_arrival_hold[ids_t] = 0
+                counts_e = self._guided_counts_at_envs(ids_t)
+                guided_ok = counts_e > 0
+                if bool(guided_ok.any()):
+                    self._guided_wp_idx[ids_t[guided_ok]] = 0
+                    self._set_guided_positions([int(i) for i in ids_t[guided_ok].tolist()], reset_index=True)
+                if bool((~guided_ok).any()):
+                    self._sample_flat_patch_positions(
+                        [int(i) for i in ids_t[~guided_ok].tolist()], force_restart=True
+                    )
+            else:
+                self._sample_flat_patch_positions([int(i) for i in ids_t.tolist()], force_restart=True)
 
-        if len(random_velocity_env_ids) > 0:
-            self.random_lin_vel_x[random_velocity_env_ids] = self.random_lin_vel_x_range[
-                random_velocity_env_ids, 0
-            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
-                self.random_lin_vel_x_range[random_velocity_env_ids, 1]
-                - self.random_lin_vel_x_range[random_velocity_env_ids, 0]
-            )
-            self.random_lin_vel_y[random_velocity_env_ids] = self.random_lin_vel_y_range[
-                random_velocity_env_ids, 0
-            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
-                self.random_lin_vel_y_range[random_velocity_env_ids, 1]
-                - self.random_lin_vel_y_range[random_velocity_env_ids, 0]
-            )
-            self.random_ang_vel_z[random_velocity_env_ids] = self.random_ang_vel_z_range[
-                random_velocity_env_ids, 0
-            ] + torch.rand(len(random_velocity_env_ids), device=self.device) * (
-                self.random_ang_vel_z_range[random_velocity_env_ids, 1]
-                - self.random_ang_vel_z_range[random_velocity_env_ids, 0]
-            )
-            self.random_ang_vel_z *= torch.abs(self.random_ang_vel_z) > 0.2
+        base_reset = getattr(super(), "reset", None)
+        if callable(base_reset):
+            out = base_reset(env_ids)
+            return out if isinstance(out, dict) else {}
+        return {}
 
     def _update_command(self):
         """Re-target the position command to the current root state."""
+        self._maybe_advance_guided_waypoints()
+        self._maybe_advance_flat_patch_by_arrival()
+
         target_vec = self.pos_command_w - self.robot.data.root_link_pos_w[:, :3]
         target_dist = torch.norm(target_vec[:, :2], dim=1)
         self.pos_command_b[:] = quat_rotate_inverse(yaw_quat(self.robot.data.root_link_quat_w), target_vec)
@@ -258,6 +577,10 @@ class PoseVelocityCommand(CommandTerm):
         self.heading_command_w = wrap_to_pi(target_direction - self.robot.data.heading_w)
 
         self.vel_command_b[:, 2] = self.heading_command_w * self.cfg.heading_control_stiffness
+
+        if self.cfg.yaw_vel_gate_threshold is not None:
+            yaw_gate_mask = self.heading_command_w.abs() > self.cfg.yaw_vel_gate_threshold
+            self.vel_command_b[yaw_gate_mask, :2] = 0.0
 
         # scale linear velocity so the dominant axis hits its limit and
         # the other axis preserves its ratio
@@ -296,10 +619,10 @@ class PoseVelocityCommand(CommandTerm):
 
         self.vel_command_b[:, 2] = torch.clamp(
             self.vel_command_b[:, 2],
-            self.cfg.ranges.ang_vel_z[0],
-            self.cfg.ranges.ang_vel_z[1],
+            self.ang_vel_z_range[:, 0],
+            self.ang_vel_z_range[:, 1],
         )
-        self.vel_command_b[:] *= (target_dist > self.cfg.target_dis_threshold).unsqueeze(-1)
+        self.vel_command_b[:] *= (target_dist > self._velocity_stop_xy_dist()).unsqueeze(-1)
         self.vel_command_b[:, :2] *= (
             (torch.norm(self.vel_command_b[:, :2], dim=1) > self.cfg.lin_vel_threshold).float().unsqueeze(-1)
         )
@@ -327,6 +650,7 @@ class PoseVelocityCommand(CommandTerm):
         base_pos_ws = self.robot.data.root_link_pos_w.cpu().numpy()
         base_quat_ws = self.robot.data.root_link_quat_w.cpu().numpy()
         lin_vel_bs = self.robot.data.root_link_lin_vel_b.cpu().numpy()
+        ang_vel_bs = self.robot.data.root_link_ang_vel_b.cpu().numpy()
 
         # Visualization parameters
         goal_radius = self.cfg.target_dis_threshold
@@ -334,6 +658,8 @@ class PoseVelocityCommand(CommandTerm):
         patch_height = 0.05
         arrow_z_offset = 0.5
         arrow_scale = 0.5
+        tangential_radius = 0.35
+        ang_hub_z_extra = 0.12
 
         for batch in env_indices:
             # Skip if robot appears uninitialized (at origin)
@@ -395,23 +721,88 @@ class PoseVelocityCommand(CommandTerm):
                 label=f"actual_vel_{batch}",
             )
 
-            # 4. Optionally draw all flat patches (if patch_vis is enabled)
-            if self.cfg.patch_vis:
+            # Tangential yaw-rate arrows at body +x (ω×r hub); +ω_z → body +y (CCW from above).
+            ang_hub = base_pos.copy()
+            ang_hub[0] += cos_yaw * tangential_radius
+            ang_hub[1] += sin_yaw * tangential_radius
+            ang_hub[2] += arrow_z_offset + ang_hub_z_extra
+            tang_dir_w = np.array([-sin_yaw, cos_yaw, 0.0])
+
+            def _draw_tangential_ang_vel(omega_z: float, color: tuple[float, float, float, float], label: str) -> None:
+                if abs(omega_z) < 1e-5:
+                    return
+                arc_len = abs(omega_z) * tangential_radius * arrow_scale
+                tang = tang_dir_w * (np.sign(omega_z) * arc_len)
+                visualizer.add_arrow(
+                    start=ang_hub,
+                    end=ang_hub + tang,
+                    color=color,
+                    width=0.018,
+                    label=label,
+                )
+
+            _draw_tangential_ang_vel(vel_cmd_b[2], (1.0, 0.95, 0.1, 0.85), f"cmd_ang_vel_{batch}")
+            _draw_tangential_ang_vel(ang_vel_bs[batch][2], (1.0, 0.1, 0.75, 0.85), f"actual_ang_vel_{batch}")
+
+            # 4. Flat-patch target candidates (terrain flat_patches["target"]) for this env's (level, type).
+            if self.cfg.patch_vis or self.cfg.show_flat_patch_candidates:
                 valid_targets = self.valid_targets.cpu().numpy()
                 terrain_level = self.terrain.terrain_levels[batch].item()
                 terrain_type = self.terrain.terrain_types[batch].item()
                 patches = valid_targets[terrain_level, terrain_type]
-
-                for i, patch_pos in enumerate(patches):
-                    if np.linalg.norm(patch_pos) < 1e-6:  # Skip invalid patches
-                        continue
+                n_p_cell = int(patches.shape[0])
+                if self._flat_patch_num_valid is not None:
+                    n_p_cell = int(self._flat_patch_num_valid[terrain_level, terrain_type].item())
+                    n_p_cell = max(1, min(n_p_cell, int(patches.shape[0])))
+                n_cap = self.cfg.flat_patch_target_count
+                if n_cap is None:
+                    n_cap = n_p_cell
+                else:
+                    n_cap = min(int(n_cap), n_p_cell)
+                patch_radius_vis = float(goal_radius) * 0.5
+                cur_patch_i = int(self._flat_patch_idx[batch].item())
+                for i in range(n_cap):
+                    patch_pos = patches[i]
+                    if not np.all(np.isfinite(patch_pos)):
+                        break
+                    if i > 0 and np.allclose(patch_pos, patches[i - 1], atol=2e-3, rtol=0.0):
+                        break
                     patch_start = patch_pos.copy()
                     patch_end = patch_pos.copy()
                     patch_end[2] += patch_height
+                    is_current = i == cur_patch_i
+                    rgba = ((1.0, 0.45, 0.05, 0.75) if is_current else (0.0, 0.35, 1.0, 0.55))
                     visualizer.add_cylinder(
                         start=patch_start,
                         end=patch_end,
-                        radius=goal_radius,
-                        color=(0.0, 0.0, 1.0, 0.3),
-                        label=f"patch_{batch}_{i}",
+                        radius=patch_radius_vis,
+                        color=rgba,
+                        label=f"flat_target_{batch}_i{i}{'_current' if is_current else ''}",
                     )
+
+            # 5. Draw full guided waypoint sequence for this env's (level, type) cell
+            if self._guided_mode and self._guided_world is not None and self._guided_counts is not None:
+                terrain_level = self.terrain.terrain_levels[batch].item()
+                terrain_type = self.terrain.terrain_types[batch].item()
+                n_wp = int(self._guided_counts[terrain_level, terrain_type].item())
+                if n_wp > 0:
+                    wp_xyz = self._guided_world[terrain_level, terrain_type, :n_wp].detach().cpu().numpy()
+                    cur_i = int(self._guided_wp_idx[batch].item())
+                    wp_radius = float(goal_radius) * 0.55
+                    for i, wp in enumerate(wp_xyz):
+                        if float(np.linalg.norm(wp)) < 1e-9:
+                            continue
+                        wp_start = wp.copy()
+                        wp_end = wp.copy()
+                        wp_end[2] += patch_height
+                        is_active = i == cur_i
+                        rgba = (
+                            (1.0, 0.55, 0.05, 0.65) if is_active else (0.05, 0.85, 0.9, 0.4)
+                        )
+                        visualizer.add_cylinder(
+                            start=wp_start,
+                            end=wp_end,
+                            radius=wp_radius,
+                            color=rgba,
+                            label=f"guided_wp_{batch}_{i}",
+                        )

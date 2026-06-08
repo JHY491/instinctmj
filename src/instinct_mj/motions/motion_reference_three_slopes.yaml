@@ -1,0 +1,6 @@
+# AMP motion list for Instinct-Parkour-Adam-Lite-Three-Slopes-v0 (all retargeted clips from top_view_base_moe).
+selected_files:
+  - walk_retargeted.npz
+  - walk_run_retargeted.npz
+  - walk_slope_retargeted.npz
+  - run_slope_retargeted.npz

@@ -30,3 +30,12 @@ def register_virtual_obstacle_to_sensor(
 
     if enable_debug_vis:
         env.scene.terrain.set_debug_vis(True)
+
+
+def enable_terrain_virtual_obstacle_debug_vis(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None = None,
+):
+    """Draw terrain virtual obstacles in the viewer (no volume-points sensor required)."""
+    del env_ids
+    env.scene.terrain.set_debug_vis(True)

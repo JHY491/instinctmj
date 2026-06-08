@@ -82,6 +82,9 @@ class TerrainImporter(TerrainEntityBase):
         self.terrain_generator = None
         self._flat_patches = {}
         self._flat_patch_radii = {}
+        self._flat_patch_num_valid: dict[str, torch.Tensor] = {}
+        self._flat_patch_headings: dict[str, torch.Tensor] = {}
+        self._height_query_mesh: trimesh.Trimesh | None = None
 
         if self.cfg.terrain_type == "generator":
             if self.cfg.terrain_generator is None:
@@ -104,6 +107,18 @@ class TerrainImporter(TerrainEntityBase):
                 for name, arr in self.terrain_generator.flat_patches.items()
             }
             self._flat_patch_radii = dict(self.terrain_generator.flat_patch_radii)
+            fnv = getattr(self.terrain_generator, "flat_patch_num_valid", None)
+            if fnv is not None:
+                self._flat_patch_num_valid = {
+                    k: torch.from_numpy(v).to(device=self.device, dtype=torch.long)
+                    for k, v in fnv.items()
+                }
+            headings = getattr(self.terrain_generator, "flat_patch_headings", None)
+            if headings is not None:
+                self._flat_patch_headings = {
+                    k: torch.from_numpy(v).to(device=self.device, dtype=torch.float)
+                    for k, v in headings.items()
+                }
         elif self.cfg.terrain_type == "plane":
             self._import_ground_plane("terrain")
             if self.env_origins is None:
@@ -116,17 +131,21 @@ class TerrainImporter(TerrainEntityBase):
         self._add_flat_patch_sites()
 
         if len(self._virtual_obstacles) > 0:
-            generated_from_hfield = False
-            if self._virtual_obstacle_source == "heightfield":
-                generated_from_hfield = self._generate_virtual_obstacles_from_heightfield()
+            self._validate_subterrain_virtual_obstacle_keys()
+            if self._uses_selective_subterrain_virtual_obstacles():
+                self._generate_virtual_obstacles_by_subterrain()
+            else:
+                generated_from_hfield = False
+                if self._virtual_obstacle_source == "heightfield":
+                    generated_from_hfield = self._generate_virtual_obstacles_from_heightfield()
 
-            if not generated_from_hfield:
-                terrain_mesh = self._get_terrain_mesh_for_virtual_obstacles()
-                if terrain_mesh is None:
-                    raise RuntimeError(
-                        "virtual obstacles are configured but no terrain mesh is available from terrain generator."
-                    )
-                self._generate_virtual_obstacles(terrain_mesh)
+                if not generated_from_hfield:
+                    terrain_mesh = self._get_terrain_mesh_for_virtual_obstacles()
+                    if terrain_mesh is None:
+                        raise RuntimeError(
+                            "virtual obstacles are configured but no terrain mesh is available from terrain generator."
+                        )
+                    self._generate_virtual_obstacles(terrain_mesh)
             self._release_terrain_mesh_cache()
 
         if self._collision_debug_vis:
@@ -158,6 +177,16 @@ class TerrainImporter(TerrainEntityBase):
             else None
         )
 
+    @property
+    def flat_patch_num_valid(self) -> dict[str, torch.Tensor]:
+        """Per (terrain_row, terrain_col) count of real flat-patch slots (excludes spawn padding)."""
+        return self._flat_patch_num_valid
+
+    @property
+    def flat_patch_headings(self) -> dict[str, torch.Tensor]:
+        """Per-patch spawn yaw (rad) from terrain centerline, when available."""
+        return self._flat_patch_headings
+
     """
     Operations - Import.
     """
@@ -183,6 +212,18 @@ class TerrainImporter(TerrainEntityBase):
                 for name, arr in self.terrain_generator.flat_patches.items()
             }
             self._flat_patch_radii = dict(self.terrain_generator.flat_patch_radii)
+            fnv = getattr(self.terrain_generator, "flat_patch_num_valid", None)
+            if fnv is not None:
+                self._flat_patch_num_valid = {
+                    k: torch.from_numpy(v).to(device=self.device, dtype=torch.long)
+                    for k, v in fnv.items()
+                }
+            headings = getattr(self.terrain_generator, "flat_patch_headings", None)
+            if headings is not None:
+                self._flat_patch_headings = {
+                    k: torch.from_numpy(v).to(device=self.device, dtype=torch.float)
+                    for k, v in headings.items()
+                }
             return
 
         self._spec.worldbody.add_body(name=name).add_geom(
@@ -204,16 +245,149 @@ class TerrainImporter(TerrainEntityBase):
         terrain_mesh = self.terrain_generator.terrain_mesh
         return terrain_mesh
 
+    @staticmethod
+    def _subterrain_virtual_obstacle_keys(subterrain_cfg: SubTerrainBaseCfg | None) -> tuple[str, ...]:
+        if subterrain_cfg is None:
+            return ()
+        keys = getattr(subterrain_cfg, "virtual_obstacle_keys", ())
+        if keys is None:
+            return ()
+        if isinstance(keys, str):
+            raise TypeError("virtual_obstacle_keys must be a sequence of obstacle names, not a single string.")
+        return tuple(keys)
+
+    def _uses_selective_subterrain_virtual_obstacles(self) -> bool:
+        gen_cfg = self.cfg.terrain_generator
+        if gen_cfg is None or not hasattr(gen_cfg, "sub_terrains"):
+            return False
+        return any(
+            len(self._subterrain_virtual_obstacle_keys(sub_cfg)) > 0 for sub_cfg in gen_cfg.sub_terrains.values()
+        )
+
+    def _validate_subterrain_virtual_obstacle_keys(self) -> None:
+        if not self._uses_selective_subterrain_virtual_obstacles():
+            return
+        known_keys = set(self._virtual_obstacles)
+        gen_cfg = self.cfg.terrain_generator
+        if gen_cfg is None or not hasattr(gen_cfg, "sub_terrains"):
+            return
+        for sub_name, sub_cfg in gen_cfg.sub_terrains.items():
+            for key in self._subterrain_virtual_obstacle_keys(sub_cfg):
+                if key not in known_keys:
+                    raise ValueError(
+                        f"sub_terrain {sub_name!r} lists virtual_obstacle_keys {key!r}, "
+                        f"but terrain importer virtual_obstacles defines {sorted(known_keys)}."
+                    )
+
+    def _get_per_tile_meshes_for_virtual_obstacles(self) -> list[trimesh.Trimesh]:
+        if self.terrain_generator is None:
+            return []
+        terrain_meshes = getattr(self.terrain_generator, "_terrain_meshes", None)
+        if isinstance(terrain_meshes, list) and len(terrain_meshes) > 0:
+            return list(terrain_meshes)
+        terrain_mesh = getattr(self.terrain_generator, "terrain_mesh", None)
+        if terrain_mesh is not None:
+            return [terrain_mesh]
+        return []
+
+    def _repair_subterrain_mesh_for_virtual_obstacles(
+        self,
+        mesh: trimesh.Trimesh,
+        geom,
+        subterrain_cfg: SubTerrainBaseCfg | None,
+    ) -> trimesh.Trimesh:
+        if not self._should_apply_mesh_like_height_repair(subterrain_cfg):
+            return mesh
+        height_threshold = self._get_hfield_mesh_like_height_threshold()
+        if height_threshold is None or geom is None:
+            return mesh
+        hfield_name = geom.hfieldname
+        if not isinstance(hfield_name, str) or hfield_name == "":
+            return mesh
+        hfield_spec = self._spec.hfield(hfield_name)
+        if hfield_spec is None:
+            return mesh
+        geom_pos = np.asarray(geom.pos, dtype=np.float64).reshape(3)
+        repaired_mesh = self._hfield_spec_to_world_mesh(
+            hfield_spec,
+            geom_pos,
+            slope_threshold=self._get_hfield_mesh_like_slope_threshold(),
+            height_threshold=height_threshold,
+        )
+        if repaired_mesh is None:
+            return mesh
+        return repaired_mesh
+
+    def _collect_meshes_by_virtual_obstacle_key(self) -> dict[str, list[trimesh.Trimesh]]:
+        meshes_by_key: dict[str, list[trimesh.Trimesh]] = {name: [] for name in self._virtual_obstacles}
+        tile_meshes = self._get_per_tile_meshes_for_virtual_obstacles()
+        subterrain_cfgs = self.subterrain_specific_cfgs or []
+        if len(tile_meshes) == 0:
+            raise RuntimeError(
+                "selective virtual_obstacle_keys require per-tile terrain meshes from the terrain generator."
+            )
+        if len(subterrain_cfgs) not in (0, len(tile_meshes)):
+            raise RuntimeError(
+                "subterrain_specific_cfgs length "
+                f"({len(subterrain_cfgs)}) must match per-tile mesh count ({len(tile_meshes)})."
+            )
+        hfield_pairs = list(self._iter_hfield_geoms_with_subterrain_cfgs())
+        for tile_index, mesh in enumerate(tile_meshes):
+            subterrain_cfg = subterrain_cfgs[tile_index] if tile_index < len(subterrain_cfgs) else None
+            obstacle_keys = self._subterrain_virtual_obstacle_keys(subterrain_cfg)
+            if len(obstacle_keys) == 0:
+                continue
+            tile_mesh = mesh
+            if tile_index < len(hfield_pairs):
+                geom, _ = hfield_pairs[tile_index]
+                tile_mesh = self._repair_subterrain_mesh_for_virtual_obstacles(mesh, geom, subterrain_cfg)
+            for key in obstacle_keys:
+                meshes_by_key[key].append(tile_mesh.copy())
+        return meshes_by_key
+
+    @staticmethod
+    def _prepare_mesh_for_virtual_obstacle(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+        prepared = mesh.copy()
+        prepared.merge_vertices()
+        prepared.update_faces(prepared.unique_faces())
+        prepared.remove_unreferenced_vertices()
+        return prepared
+
+    @staticmethod
+    def _empty_mesh_for_virtual_obstacle() -> trimesh.Trimesh:
+        return trimesh.Trimesh(
+            vertices=np.zeros((0, 3), dtype=np.float64),
+            faces=np.zeros((0, 3), dtype=np.int32),
+            process=False,
+        )
+
+    def _generate_virtual_obstacle_from_mesh_parts(
+        self,
+        name: str,
+        virtual_obstacle: VirtualObstacleBase,
+        mesh_parts: list[trimesh.Trimesh],
+    ) -> None:
+        if len(mesh_parts) == 0:
+            mesh = self._empty_mesh_for_virtual_obstacle()
+        elif len(mesh_parts) == 1:
+            mesh = mesh_parts[0]
+        else:
+            mesh = trimesh.util.concatenate(mesh_parts)
+        with Timer(f"Generate virtual obstacle {name}"):
+            virtual_obstacle.generate(self._prepare_mesh_for_virtual_obstacle(mesh), device=self.device)
+
+    def _generate_virtual_obstacles_by_subterrain(self) -> None:
+        meshes_by_key = self._collect_meshes_by_virtual_obstacle_key()
+        for name, virtual_obstacle in self._virtual_obstacles.items():
+            self._generate_virtual_obstacle_from_mesh_parts(name, virtual_obstacle, meshes_by_key[name])
+
     def _generate_virtual_obstacles(self, mesh: trimesh.Trimesh):
         """Generate virtual obstacles from a terrain mesh."""
-        mesh.merge_vertices()
-        mesh.update_faces(mesh.unique_faces())  # remove duplicate faces
-        mesh.remove_unreferenced_vertices()
-        # Generate virtual obstacles based on the generated terrain mesh.
+        prepared_mesh = self._prepare_mesh_for_virtual_obstacle(mesh)
         # NOTE: generate virtual obstacle first because it might modify the mesh.
         for name, virtual_obstacle in self._virtual_obstacles.items():
             with Timer(f"Generate virtual obstacle {name}"):
-                virtual_obstacle.generate(mesh, device=self.device)
+                virtual_obstacle.generate(prepared_mesh, device=self.device)
 
     @staticmethod
     def _simplify_polyline_collinear_indices(
@@ -482,14 +656,10 @@ class TerrainImporter(TerrainEntityBase):
             slope_threshold=slope_threshold,
         )
 
-        # `convert_height_field_to_mesh` assumes first axis is x and second is y.
-        # MuJoCo hfield uses rows->y and cols->x, so swap xy and re-scale x span.
-        # Keep vertex indexing untouched so diagonal filtering by index deltas
-        # remains valid for (nrow, ncol) grid topology.
         vertices = vertices_local.copy()
-        x_ratio = float(x_step / y_step)
-        x_world = float(geom_pos[0] - half_x) + vertices[:, 1] * x_ratio
-        y_world = float(geom_pos[1] - half_y) + vertices[:, 0]
+        vertices[:, 0] *= float(x_step / y_step)
+        x_world = float(geom_pos[0] - half_x) + vertices[:, 0]
+        y_world = float(geom_pos[1] - half_y) + vertices[:, 1]
         z_world = float(geom_pos[2]) + vertices[:, 2]
         vertices[:, 0] = x_world
         vertices[:, 1] = y_world
@@ -689,6 +859,9 @@ class TerrainImporter(TerrainEntityBase):
         """Generate virtual obstacles directly from MuJoCo hfield data."""
         if len(self._virtual_obstacles) == 0:
             return True
+        if self._uses_selective_subterrain_virtual_obstacles():
+            self._generate_virtual_obstacles_by_subterrain()
+            return True
 
         # Preserve original InstinctLab semantics as closely as possible:
         # reconstruct one mesh-like hfield surface first, merge shared tile
@@ -723,6 +896,10 @@ class TerrainImporter(TerrainEntityBase):
         if self.terrain_generator is None:
             return
         if isinstance(self.terrain_generator, FiledTerrainGenerator):
+            if self._height_query_mesh is None:
+                terrain_mesh = self.terrain_generator.terrain_mesh
+                if terrain_mesh is not None:
+                    self._height_query_mesh = terrain_mesh.copy()
             self.terrain_generator.terrain_mesh = None
             terrain_meshes = self.terrain_generator._terrain_meshes
             if isinstance(terrain_meshes, list):

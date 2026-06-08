@@ -9,8 +9,8 @@ from instinct_mj.tasks.registry import register_instinct_task
 
 
 def _parkour_cfg(play: bool):
-  from .adam_sp_parkour_cfg import instinct_adam_sp_parkour_final_cfg
-  return instinct_adam_sp_parkour_final_cfg(play=play)
+  from .adam_lite_parkour_cfg import instinct_adam_lite_parkour_final_cfg
+  return instinct_adam_lite_parkour_final_cfg(play=play)
 
 
 def _runner_cfg():
@@ -31,4 +31,30 @@ register_instinct_task(
   env_cfg_factory=lambda: _parkour_cfg(play=True),
   play_env_cfg_factory=lambda: _parkour_cfg(play=True),
   instinct_rl_cfg_factory=_runner_cfg,
+)
+
+
+def _three_slopes_parkour_cfg(play: bool):
+  from .adam_lite_three_slopes_parkour_cfg import instinct_adam_lite_three_slopes_parkour_final_cfg
+  return instinct_adam_lite_three_slopes_parkour_final_cfg(play=play)
+
+
+def _three_slopes_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_three_slopes_parkour_amp_runner_cfg
+  return adam_lite_three_slopes_parkour_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Three-Slopes-v0",
+  env_cfg_factory=lambda: _three_slopes_parkour_cfg(play=False),
+  play_env_cfg_factory=lambda: _three_slopes_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_three_slopes_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Three-Slopes-Play-v0",
+  env_cfg_factory=lambda: _three_slopes_parkour_cfg(play=True),
+  play_env_cfg_factory=lambda: _three_slopes_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_three_slopes_runner_cfg,
 )

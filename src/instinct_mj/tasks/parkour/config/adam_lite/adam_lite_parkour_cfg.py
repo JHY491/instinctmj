@@ -1,4 +1,4 @@
-"""Adam SP parkour: noise-only terrain, no vision, with AMP, no MoE."""
+"""Adam Lite parkour: noise-only terrain, no vision, with AMP, no MoE."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ _PARKOUR_DATASET_DIR = os.path.expanduser("src/instinct_mj/motions")
 
 @dataclass(kw_only=True)
 class AmassMotionCfg(AmassMotionCfgBase):
-    """Parkour AMASS motion buffer config for Adam SP."""
+    """Parkour AMASS motion buffer config for Adam Lite."""
 
     path: str = _PARKOUR_DATASET_DIR
     retargetting_func: object | None = None
@@ -119,11 +119,11 @@ motion_reference_cfg = MotionReferenceManagerCfg(
 )
 
 
-def instinct_adam_sp_parkour_env_cfg(
+def instinct_adam_lite_parkour_env_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Adam SP parkour with noise-only terrain, with AMP, no vision/MoE."""
+    """Adam Lite parkour with noise-only terrain, with AMP, no vision/MoE."""
     cfg = adam_sp_flat_parkour_env_cfg(play=play, has_state_estimation=True)
     setattr(cfg, "monitors", {})
     cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
@@ -563,7 +563,7 @@ def instinct_adam_sp_parkour_env_cfg(
         "is_alive": RewardTermCfg(func=envs_mdp.is_alive, weight=3.0),
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
-            weight=-0.,
+            weight=-0.5,
             params={"command_name": "base_velocity", "offset": 1.0},
         ),
         "volume_points_penetration": RewardTermCfg(
@@ -919,12 +919,12 @@ def instinct_adam_sp_parkour_env_cfg(
     return cfg
 
 
-def instinct_adam_sp_parkour_final_cfg(
+def instinct_adam_lite_parkour_final_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Final Adam SP parkour env config (with optional play viewer overrides)."""
-    cfg = instinct_adam_sp_parkour_env_cfg(play=play)
+    """Final Adam Lite parkour env config (with optional play viewer overrides)."""
+    cfg = instinct_adam_lite_parkour_env_cfg(play=play)
     if play:
         cfg.viewer = ViewerConfig(
             lookat=(0.0, 0.75, 0.0),

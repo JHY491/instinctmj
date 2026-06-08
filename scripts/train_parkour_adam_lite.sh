@@ -14,13 +14,10 @@
 #   ./scripts/train_parkour_adam_lite.sh --gpu-ids "[0,1]" # 显式透传 instinct-train（与未设置 CUDA 时「物理卡下标」语义一致）
 #   ./scripts/train_parkour_adam_lite.sh --num-envs 8192 --background
 #
-# 断点续训（默认不 resume，需显式加 --resume；传给 instinct-train 为 agent dot override）:
+# 断点续训（默认不 resume，需显式加 --resume 或直接指定 .pt）:
 #   ./scripts/train_parkour_adam_lite.sh --resume --load-run 2026-03-24_11-19-28 --checkpoint model_29500.pt
-# 等价于:
-#   instinct-train ... --agent.resume true \
-#     --agent.load-run 2026-03-24_11-19-28 \
-#     --agent.load-checkpoint model_29500.pt
-# （脚本内使用 --agent.load_run / --agent.load_checkpoint，因 dataclass 字段为下划线，与上式等价。）
+#   ./scripts/train_parkour_adam_lite.sh --checkpoint logs/instinct_rl/adam_lite_parkour_amp_vision/2026-03-24_11-19-28/model_29500.pt
+#   ./scripts/train_parkour_adam_lite.sh --resume logs/instinct_rl/adam_lite_parkour_amp_vision/2026-03-24_11-19-28/model_29500.pt
 #   ./scripts/train_parkour_adam_lite.sh --resume --load-run /abs/path/to/run_dir --checkpoint model_29500.pt
 #
 
@@ -60,15 +57,21 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --resume)
+      if [[ $# -gt 1 && "$2" != -* && "$2" == *.pt ]]; then
+        CHECKPOINT_ARG="$2"
+        shift 2
+      else
+        shift
+      fi
       RESUME=true
-      shift
       ;;
     --load-run|--load_run)
       LOAD_RUN_ARG="$2"
       shift 2
       ;;
-    --checkpoint)
+    --checkpoint|--pt)
       CHECKPOINT_ARG="$2"
+      RESUME=true
       shift 2
       ;;
     *)

@@ -1,463 +1,51 @@
+"""Parkour environment scene helpers and terrain preset re-exports."""
+
 from __future__ import annotations
 
-import copy
-
 import mujoco
-from mjlab.terrains import FlatPatchSamplingCfg
 from mjlab.utils.spec_config import MaterialCfg, TextureCfg
 
-from instinct_mj.terrains.height_field.hf_terrains_cfg import (
-    PerlinDiscreteObstaclesTerrainCfg,
-    PerlinInvertedPyramidSlopedTerrainCfg,
-    PerlinInvertedPyramidStairsTerrainCfg,
-    PerlinPlaneTerrainCfg,
-    PerlinPyramidStairsTerrainCfg,
-    PerlinSquareGapTerrainCfg,
-    PerlinOneSidedStairsTerrainCfg,
+from instinct_mj.tasks.parkour.config.terrains.presets import (  # noqa: F401
+    ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG,
+    ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG_PLAY,
+    ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG,
+    ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG_PLAY,
+    ADAM_LITE_PARKOUR_TERRAINS_CFG,
+    BRIDGE_L_CORNER_TERRAINS_CFG,
+    BRIDGE_L_CORNER_TERRAINS_CFG_PLAY,
+    CONTINUOUS_HURDLE_TERRAIN_CFG,
+    CONTINUOUS_HURDLE_TERRAIN_CFG_PLAY,
+    CONTINUOUS_SLOPE_TERRAIN_CFG,
+    CONTINUOUS_SLOPE_TERRAIN_CFG_PLAY,
+    CROSS_SLOPE_TERRAIN_CFG,
+    CROSS_SLOPE_TERRAIN_CFG_PLAY,
+    CURVED_BRIDGE_TERRAIN_CFG,
+    CURVED_BRIDGE_TERRAIN_CFG_PLAY,
+    HURDLE_TERRAINS_CFG,
+    HURDLE_TERRAINS_CFG_PLAY,
+    NARROW_L_CORNER_TERRAIN_CFG,
+    NARROW_L_CORNER_TERRAIN_CFG_PLAY,
+    NARROW_L_CORNER_RIGHT_TERRAIN_CFG,
+    NARROW_L_CORNER_RIGHT_TERRAIN_CFG_PLAY,
+    PYRAMID_STAIRS_TERRAIN_CFG,
+    PYRAMID_STAIRS_TERRAIN_CFG_PLAY,
+    PYRAMID_STAIRS_INV_TERRAIN_CFG,
+    PYRAMID_STAIRS_INV_TERRAIN_CFG_PLAY,
+    NOISE_ONLY_TERRAINS_CFG,
+    NOISE_ONLY_TERRAINS_CFG_PLAY,
+    PARKOUR_TERRAIN_CATALOG_CFG,
+    PARKOUR_TERRAIN_CATALOG_CFG_PLAY,
+    ROUGH_TERRAINS_CFG,
+    ROUGH_TERRAINS_CFG_PLAY,
+    SLALOM_POLE_TERRAIN_CFG,
+    SLALOM_POLE_TERRAIN_CFG_PLAY,
+    STAIRS_ONLY_TERRAINS_CFG,
+    STAIRS_ONLY_TERRAINS_CFG_PLAY,
+    SYMMETRICAL_SLOPE_TERRAIN_CFG,
+    SYMMETRICAL_SLOPE_TERRAIN_CFG_PLAY,
+    THREE_SLOPES_TERRAINS_CFG,
+    THREE_SLOPES_TERRAINS_CFG_PLAY,
 )
-from instinct_mj.terrains.terrain_generator_cfg import FiledTerrainGeneratorCfg
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-##
-# Scene definition -- Terrain
-##
-
-ROUGH_TERRAINS_CFG = FiledTerrainGeneratorCfg(
-    seed=0,
-    size=(8.0, 8.0),
-    border_width=3.0,
-    num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.07,
-    vertical_scale=0.005,
-    slope_threshold=1.0,
-    curriculum=True,
-    add_lights=True,
-    sub_terrains={
-        "perlin_rough": PerlinPlaneTerrainCfg(
-            proportion=0.05,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "perlin_rough_stand": PerlinPlaneTerrainCfg(
-            proportion=0.05,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "square_gaps": PerlinSquareGapTerrainCfg(
-            proportion=0.10,
-            gap_distance_range=(0.1, 0.7),
-            gap_depth=(0.4, 0.6),
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs": PerlinPyramidStairsTerrainCfg(
-            proportion=0.15,
-            step_height_range=(0.05, 0.23),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs_high": PerlinPyramidStairsTerrainCfg(
-            proportion=0.10,
-            step_height_range=(0.05, 0.45),
-            step_width=1.5,
-            platform_width=4.0,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs_inv": PerlinInvertedPyramidStairsTerrainCfg(
-            proportion=0.15,
-            step_height_range=(0.05, 0.23),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs_inv_high": PerlinInvertedPyramidStairsTerrainCfg(
-            proportion=0.10,
-            step_height_range=(0.05, 0.45),
-            step_width=1.5,
-            platform_width=4.0,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-1.2, 1.2),
-                ),
-            },
-        ),
-        "boxes": PerlinDiscreteObstaclesTerrainCfg(
-            proportion=0.10,
-            num_obstacles=20,
-            obstacle_height_mode="fixed",
-            obstacle_width_range=(0.8, 1.5),
-            obstacle_height_range=(0.05, 0.45),
-            platform_width=1.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        # Keep key name for command-range compatibility, but use pure hfield generation.
-        "mesh_boxes": PerlinDiscreteObstaclesTerrainCfg(
-            proportion=0.10,
-            num_obstacles=120,
-            obstacle_height_mode="fixed",
-            obstacle_width_range=(0.30, 0.50),
-            obstacle_height_range=(0.05, 0.45),
-            platform_width=1.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(num_patches=50, patch_radius=[0.05, 0.10, 0.15], max_height_diff=0.05),
-            },
-        ),
-        "hf_pyramid_slope_inv": PerlinInvertedPyramidSlopedTerrainCfg(
-            proportion=0.10,
-            slope_range=(0.0, 0.7),
-            platform_width=1.5,
-            border_width=1.0,
-            wall_prob=[0.3, 0.3, 0.3, 0.3],
-            wall_height=5.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.00,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-    },
-)
-
-ROUGH_TERRAINS_CFG_PLAY = copy.deepcopy(ROUGH_TERRAINS_CFG)
-ROUGH_TERRAINS_CFG_PLAY.num_rows = 4
-ROUGH_TERRAINS_CFG_PLAY.num_cols = 10
-
-# Noise-only terrain (no walls), for simple parkour.
-NOISE_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
-    seed=0,
-    size=(8.0, 8.0),
-    border_width=3.0,
-    num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.07,
-    vertical_scale=0.005,
-    slope_threshold=1.0,
-    curriculum=True,
-    add_lights=True,
-    sub_terrains={
-        "perlin_rough": PerlinPlaneTerrainCfg(
-            proportion=1.0,
-            noise_scale=[0., 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=0.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-    },
-)
-NOISE_ONLY_TERRAINS_CFG_PLAY = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG)
-NOISE_ONLY_TERRAINS_CFG_PLAY.num_rows = 4
-NOISE_ONLY_TERRAINS_CFG_PLAY.num_cols = 10
-
-# Stairs-only terrain (pyramid_stairs only), for simple parkour.
-STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
-    seed=0,
-    size=(8.0, 8.0),
-    border_width=5.0,
-    num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.05,
-    vertical_scale=0.005,
-    slope_threshold=1.0,
-    curriculum=True,
-    add_lights=True,
-    sub_terrains={
-        "perlin_rough": PerlinPlaneTerrainCfg(
-            proportion=0.1,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "perlin_rough_stand": PerlinPlaneTerrainCfg(
-            proportion=0.1,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "pyramid_stairs": PerlinPyramidStairsTerrainCfg(
-            proportion=0.,
-            step_height_range=(0.05, 0.20),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs_inv": PerlinInvertedPyramidStairsTerrainCfg(
-            proportion=0.,
-            step_height_range=(0.05, 0.20),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "one_sided_stairs": PerlinOneSidedStairsTerrainCfg(
-            proportion=0.8,
-            step_height_range=(0.05, 0.20),
-            step_width=0.3,
-            platform_width=1.5,
-            lateral_width=(2.0, 4.0),
-            stair_face="neg_y",
-            up_down=True,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(0.0, 0.0),
-                ),
-            },
-        ),
-    },
-)
-STAIRS_ONLY_TERRAINS_CFG_PLAY = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG)
-STAIRS_ONLY_TERRAINS_CFG_PLAY.num_rows = 4
-STAIRS_ONLY_TERRAINS_CFG_PLAY.num_cols = 10
-
-
-# ---------------------------------------------------------------------------
-# Curriculum
-# ---------------------------------------------------------------------------
 
 
 def _edit_parkour_scene_spec(spec: mujoco.MjSpec) -> None:
@@ -518,8 +106,6 @@ def _edit_parkour_scene_spec(spec: mujoco.MjSpec) -> None:
         geom.material = ground_material_name
         geom.rgba[:] = (0.72, 0.72, 0.72, 1.0)
 
-    # Terrain generator can add a directional fill light that over-brightens the
-    # checker ground in parkour scenes; keep it soft and matte.
     for light in terrain_body.lights:
         light.castshadow = False
         light.ambient[:] = (0.08, 0.08, 0.08)

@@ -166,6 +166,10 @@ class FiledTerrainGenerator(TerrainGenerator):
         self._cache_original_patch_radii(runtime_cfg)
         self._normalize_patch_radii_for_mjlab_core(runtime_cfg)
         super().__init__(runtime_cfg, device)
+        self.flat_patch_headings: dict[str, np.ndarray] = {
+            name: np.full(arr.shape[:3], np.nan, dtype=np.float64)
+            for name, arr in self.flat_patches.items()
+        }
 
     def _cache_original_patch_radii(self, cfg: FiledTerrainGeneratorCfg) -> None:
         """Cache original patch-radius config per subterrain for mesh sampling."""
@@ -451,13 +455,27 @@ class FiledTerrainGenerator(TerrainGenerator):
                         terrain_geom.geom.rgba[:] = (0.5, 0.5, 0.5, 1.0)
 
         spawn_origin = output.origin + world_position
+        if not hasattr(self, "flat_patch_num_valid"):
+            self.flat_patch_num_valid: dict[str, np.ndarray] = {
+                name: np.zeros((arr.shape[0], arr.shape[1]), dtype=np.int64)
+                for name, arr in self.flat_patches.items()
+            }
         for name, arr in self.flat_patches.items():
             if output.flat_patches is not None and name in output.flat_patches:
-                patches = output.flat_patches[name]
-                arr[sub_row, sub_col, : len(patches)] = patches + world_position
-                arr[sub_row, sub_col, len(patches) :] = spawn_origin
+                patches = np.asarray(output.flat_patches[name], dtype=np.float64)
+                nv = int(len(patches))
+                if patches.ndim == 2 and patches.shape[1] >= 4:
+                    self.flat_patch_headings[name][sub_row, sub_col, :nv] = patches[:, 3]
+                    patches = patches[:, :3]
+                elif patches.ndim == 1 and patches.shape[0] >= 4:
+                    self.flat_patch_headings[name][sub_row, sub_col, 0] = float(patches[3])
+                    patches = patches[:3]
+                arr[sub_row, sub_col, :nv] = patches + world_position
+                arr[sub_row, sub_col, nv:] = spawn_origin
+                self.flat_patch_num_valid[name][sub_row, sub_col] = nv
             else:
                 arr[sub_row, sub_col] = spawn_origin
+                self.flat_patch_num_valid[name][sub_row, sub_col] = 1
 
         # Collect world-frame mesh for virtual obstacle generation.
         # Prefer the generator-side source mesh so mesh-like virtual-obstacle
