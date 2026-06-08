@@ -914,7 +914,7 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     add_lights=True,
     sub_terrains={
         "perlin_rough_stand": PerlinPlaneTerrainCfg(
-            proportion=0.1,
+            proportion=0.2,
             noise_scale=[0.0, 0.2],
             noise_frequency=20,
             fractal_octaves=2,
@@ -956,7 +956,7 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             },
         ),
         "cross_slope": PerlinCrossSlopeTerrainCfg(
-            proportion=0.5,
+            proportion=0.4,
             total_length=6.0,
             terrain_width=3.0,
             segment_length=1.5,
