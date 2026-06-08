@@ -667,7 +667,7 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
             num_hurdles=5,
             hurdle_width=2.4,
             hurdle_height=0.3,
-            hurdle_height_range=(0.02, 0.30),
+            hurdle_height_range=(0.05, 0.30),
             hurdle_thickness=0.05,
             hurdle_spacing=1.1,
             hurdle_spacing_range=(1.5, 1.0),
@@ -1250,6 +1250,104 @@ _play_curved_bridge = BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.sub_terrains["curved_bri
 _play_curved_bridge.straight_max_difficulty = 1.0 / float(BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.num_rows)
 
 # ---------------------------------------------------------------------------
+# Mixed hurdle (stand / walk / continuous hurdle, training num_cols=20)
+# ---------------------------------------------------------------------------
+
+MIXED_HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
+    seed=0,
+    size=(8.0, 8.0),
+    border_width=3.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=1.0,
+    curriculum=True,
+    add_lights=True,
+    sub_terrains={
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.2],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "continuous_hurdle": PerlinContinuousHurdleTerrainCfg(
+            proportion=0.8,
+            num_hurdles=5,
+            hurdle_width=2.4,
+            hurdle_height=0.3,
+            hurdle_height_range=(0.05, 0.30),
+            hurdle_thickness=0.05,
+            hurdle_spacing=1.1,
+            hurdle_spacing_range=(1.5, 1.0),
+            perlin_cfg=PerlinPlaneTerrainCfg(
+                noise_scale=(0.02, 0.10),
+                noise_frequency=20,
+                fractal_octaves=2,
+                fractal_lacunarity=2.0,
+                fractal_gain=0.25,
+                centering=True,
+            ),
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            virtual_obstacle_keys=("hurdle_edges",),
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(7.5, 7.5),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+    },
+)
+MIXED_HURDLE_TERRAINS_CFG_PLAY = copy.deepcopy(MIXED_HURDLE_TERRAINS_CFG)
+MIXED_HURDLE_TERRAINS_CFG_PLAY.num_rows = 4
+MIXED_HURDLE_TERRAINS_CFG_PLAY.num_cols = 10
+
+# ---------------------------------------------------------------------------
 # Hurdle terrain (continuous hurdle-only, training num_cols=20)
 # ---------------------------------------------------------------------------
 
@@ -1270,7 +1368,7 @@ HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             num_hurdles=5,
             hurdle_width=2.4,
             hurdle_height=0.3,
-            hurdle_height_range=(0.02, 0.30),
+            hurdle_height_range=(0.05, 0.30),
             hurdle_thickness=0.05,
             hurdle_spacing=1.1,
             hurdle_spacing_range=(1.5, 1.0),

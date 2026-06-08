@@ -1335,24 +1335,53 @@ class PerlinContinuousHurdleTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
         # Add hurdle box geoms to the terrain body and output geometries
         # so _create_terrain_geom applies the world_position offset.
         body = spec.body("terrain")
+        hurdle_height = self.hurdle_height
+        if self.hurdle_height_range is not None:
+            lo, hi = self.hurdle_height_range
+            hurdle_height = lo + difficulty * (hi - lo)
+        hurdle_spacing = self.hurdle_spacing
+        if self.hurdle_spacing_range is not None:
+            lo, hi = self.hurdle_spacing_range
+            hurdle_spacing = lo + difficulty * (hi - lo)
+
         half_thick = self.hurdle_thickness * 0.5
         half_width = self.hurdle_width * 0.5
-        half_height = self.hurdle_height * 0.5
+        half_height = hurdle_height * 0.5
 
         total_thick = self.num_hurdles * self.hurdle_thickness
-        total_space = (self.num_hurdles - 1) * self.hurdle_spacing
+        total_space = (self.num_hurdles - 1) * hurdle_spacing
         total_length = total_thick + total_space
         x_start = (self.size[0] - total_length) * 0.5
         y_center = self.size[1] * 0.5
 
+        hurdle_meshes: list[trimesh.Trimesh] = []
         for i in range(self.num_hurdles):
-            cx = x_start + i * (self.hurdle_thickness + self.hurdle_spacing) + half_thick
+            cx = x_start + i * (self.hurdle_thickness + hurdle_spacing) + half_thick
             geom = body.add_geom(
                 type=mujoco.mjtGeom.mjGEOM_BOX,
                 size=[half_thick, half_width, half_height],
                 pos=[cx, y_center, half_height],
             )
             output.geometries.append(TerrainGeometry(geom=geom))
+            size = np.asarray(geom.size, dtype=np.float64).reshape(-1)
+            extents = 2.0 * size[:3]
+            transform = np.eye(4, dtype=np.float64)
+            quat = np.asarray(geom.quat, dtype=np.float64).reshape(-1)
+            if quat.size >= 4:
+                transform[:3, :3] = trimesh.transformations.quaternion_matrix(quat[:4])[:3, :3]
+            transform[:3, 3] = np.asarray(geom.pos, dtype=np.float64).reshape(3)
+            hurdle_meshes.append(trimesh.creation.box(extents=extents, transform=transform))
+
+        # Hfield-only surface mesh omits hurdle BOX geoms; merge them for virtual_obstacle_keys extraction.
+        mesh_parts: list[trimesh.Trimesh] = []
+        base_surface = getattr(output, "instinct_surface_mesh", None)
+        if isinstance(base_surface, trimesh.Trimesh):
+            mesh_parts.append(base_surface)
+        mesh_parts.extend(hurdle_meshes)
+        if len(mesh_parts) == 1:
+            output.instinct_surface_mesh = mesh_parts[0]
+        elif len(mesh_parts) > 1:
+            output.instinct_surface_mesh = trimesh.util.concatenate(mesh_parts)
 
         return output
 

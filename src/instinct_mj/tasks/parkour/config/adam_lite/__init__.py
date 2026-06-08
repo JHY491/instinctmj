@@ -58,3 +58,29 @@ register_instinct_task(
   play_env_cfg_factory=lambda: _three_slopes_parkour_cfg(play=True),
   instinct_rl_cfg_factory=_three_slopes_runner_cfg,
 )
+
+
+def _hurdle_parkour_cfg(play: bool):
+  from .adam_lite_hurdle_parkour_cfg import instinct_adam_lite_hurdle_parkour_final_cfg
+  return instinct_adam_lite_hurdle_parkour_final_cfg(play=play)
+
+
+def _hurdle_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_hurdle_parkour_amp_runner_cfg
+  return adam_lite_hurdle_parkour_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Hurdle-v0",
+  env_cfg_factory=lambda: _hurdle_parkour_cfg(play=False),
+  play_env_cfg_factory=lambda: _hurdle_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_hurdle_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Hurdle-Play-v0",
+  env_cfg_factory=lambda: _hurdle_parkour_cfg(play=True),
+  play_env_cfg_factory=lambda: _hurdle_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_hurdle_runner_cfg,
+)

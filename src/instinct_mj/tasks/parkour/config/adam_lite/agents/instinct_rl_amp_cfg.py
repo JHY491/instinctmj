@@ -128,3 +128,13 @@ class AdamLiteThreeSlopesParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerC
 def adam_lite_three_slopes_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """AMP runner for three-slope parkour (separate log dir from stairs/default parkour)."""
     return AdamLiteThreeSlopesParkourVisionAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteHurdleParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_hurdle_parkour"
+
+
+def adam_lite_hurdle_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """AMP runner for mixed hurdle parkour."""
+    return AdamLiteHurdleParkourVisionAmpRunnerCfg()
