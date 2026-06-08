@@ -298,11 +298,11 @@ def instinct_adam_lite_parkour_env_cfg(
             ranges=PoseVelocityCommandCfg.Ranges(
                 lin_vel_x=(0.0, 0.0),
                 lin_vel_y=(0.0, 0.0),
-                ang_vel_z=(-0.5, 0.5),
+                ang_vel_z=(-1.0, 1.0),
             ),
             random_velocity_terrain=["perlin_rough_stand",],
             velocity_ranges={
-                "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (0.0, 0.0)},
+                "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
                 "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
                 "one_sided_stairs": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
             },
@@ -813,6 +813,7 @@ def instinct_adam_lite_parkour_env_cfg(
             mode="reset",
             params={
                 "patch_name": "target",
+                "align_z_to_patch": True,
                 "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
                 "velocity_range": {
                     "x": (-0.2, 0.2),

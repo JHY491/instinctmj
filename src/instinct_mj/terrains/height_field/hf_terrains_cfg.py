@@ -123,6 +123,75 @@ def terrain_column_fixed_sequence_reset_patch_index(terrain_generator_cfg: objec
     return out
 
 
+_CENTER_SPAWN_SUBTERRAIN_NAMES = frozenset({"perlin_rough", "perlin_rough_stand"})
+
+
+def _subterrain_reset_root_xy_offset(
+    subterrain_name: str,
+    sub_cfg: object,
+    *,
+    edge_offset: tuple[float, float] = (-4.0, 0.0),
+    center_offset: tuple[float, float] = (0.0, 0.0),
+) -> tuple[float, float]:
+    """Return env-local spawn (x, y) offset for episode reset on this sub-terrain."""
+    explicit = getattr(sub_cfg, "reset_root_xy_offset", None)
+    if explicit is not None:
+        return (float(explicit[0]), float(explicit[1]))
+    if subterrain_name in _CENTER_SPAWN_SUBTERRAIN_NAMES:
+        return center_offset
+    fps = getattr(sub_cfg, "flat_patch_sampling", None)
+    if isinstance(fps, dict):
+        tgt = fps.get("target")
+        if isinstance(tgt, FixedSequenceFlatPatchSamplingCfg):
+            return edge_offset
+        if tgt is not None:
+            x_range = getattr(tgt, "x_range", None)
+            if x_range is not None and len(x_range) >= 2:
+                x0 = float(x_range[0])
+                x1 = float(x_range[1])
+                if abs(x0 - x1) < 1.0e-6 and x0 >= 3.0:
+                    return edge_offset
+    return edge_offset
+
+
+def terrain_column_reset_root_xy_offset(
+    terrain_generator_cfg: object,
+    *,
+    edge_offset: tuple[float, float] = (-4.0, 0.0),
+    center_offset: tuple[float, float] = (0.0, 0.0),
+) -> list[tuple[float, float]]:
+    """Per terrain column: robot spawn (x, y) offset in the sub-terrain cell frame."""
+    if terrain_generator_cfg is None:
+        return []
+    num_cols = int(getattr(terrain_generator_cfg, "num_cols", 0) or 0)
+    sub_terrains = getattr(terrain_generator_cfg, "sub_terrains", None)
+    if sub_terrains is None or num_cols <= 0:
+        return []
+    proportions = np.array([sub_cfg.proportion for sub_cfg in sub_terrains.values()], dtype=np.float64)
+    denom = float(np.sum(proportions))
+    if denom <= 0.0:
+        return [edge_offset] * num_cols
+    proportions = proportions / denom
+    sub_terrains_names = list(sub_terrains.keys())
+    sub_indices: list[int] = []
+    for index in range(num_cols):
+        sub_index = int(np.min(np.where(index / num_cols + 0.001 < np.cumsum(proportions))[0]))
+        sub_indices.append(sub_index)
+    out: list[tuple[float, float]] = []
+    for col in range(num_cols):
+        name = sub_terrains_names[sub_indices[col]]
+        sub_cfg = sub_terrains[name]
+        out.append(
+            _subterrain_reset_root_xy_offset(
+                name,
+                sub_cfg,
+                edge_offset=edge_offset,
+                center_offset=center_offset,
+            )
+        )
+    return out
+
+
 def _flat_patch_xy_center_relative_to_corner_frame(
     fx: float,
     fy: float,
@@ -470,6 +539,8 @@ class HfTerrainBaseCfg(SubTerrainCfg):
     vertical_scale: float = 0.005
     slope_threshold: float | None = None
     flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+    reset_root_xy_offset: tuple[float, float] | None = None
+    """Env-local spawn (x, y) offset for ``reset_root_state_on_target_patch``; z still from flat patch."""
     base_thickness_ratio: float = 1.0
     wall_prob: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0])
     wall_height: float = 5.0

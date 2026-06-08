@@ -915,7 +915,7 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     sub_terrains={
         "perlin_rough_stand": PerlinPlaneTerrainCfg(
             proportion=0.1,
-            noise_scale=[0.0, 0.1],
+            noise_scale=[0.0, 0.2],
             noise_frequency=20,
             fractal_octaves=2,
             fractal_lacunarity=2.0,

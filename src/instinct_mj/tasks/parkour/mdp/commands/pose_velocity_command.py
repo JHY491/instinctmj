@@ -125,6 +125,31 @@ class PoseVelocityCommand(CommandTerm):
         self.random_ang_vel_z_range[:, 0] = self.cfg.ranges.ang_vel_z[0]
         self.random_ang_vel_z_range[:, 1] = self.cfg.ranges.ang_vel_z[1]
 
+        if self.cfg.random_velocity_terrain is not None and self.cfg.velocity_ranges is not None:
+            terrain_generator_cfg = self.terrain.cfg.terrain_generator
+            proportions = np.array([sub_cfg.proportion for sub_cfg in terrain_generator_cfg.sub_terrains.values()])
+            proportions /= np.sum(proportions)
+            sub_indices = []
+            for index in range(terrain_generator_cfg.num_cols):
+                sub_index = np.min(np.where(index / terrain_generator_cfg.num_cols + 0.001 < np.cumsum(proportions))[0])
+                sub_indices.append(sub_index)
+            sub_indices = np.array(sub_indices, dtype=np.int32)
+            sub_terrains_names = list(terrain_generator_cfg.sub_terrains.keys())
+            for key in self.cfg.random_velocity_terrain:
+                if key not in self.cfg.velocity_ranges:
+                    continue
+                value = self.cfg.velocity_ranges[key]
+                terrain_type_index = sub_terrains_names.index(key)
+                type_indices = np.where(sub_indices == terrain_type_index)[0]
+                for type_indice in type_indices:
+                    env_indices = torch.where(self.terrain.terrain_types == type_indice)[0]
+                    self.random_lin_vel_x_range[env_indices, 0] = value["lin_vel_x"][0]
+                    self.random_lin_vel_x_range[env_indices, 1] = value["lin_vel_x"][1]
+                    self.random_lin_vel_y_range[env_indices, 0] = value["lin_vel_y"][0]
+                    self.random_lin_vel_y_range[env_indices, 1] = value["lin_vel_y"][1]
+                    self.random_ang_vel_z_range[env_indices, 0] = value["ang_vel_z"][0]
+                    self.random_ang_vel_z_range[env_indices, 1] = value["ang_vel_z"][1]
+
         # obtain the valid targets from the terrain
         if "target" not in self.terrain.flat_patches:
             raise RuntimeError(

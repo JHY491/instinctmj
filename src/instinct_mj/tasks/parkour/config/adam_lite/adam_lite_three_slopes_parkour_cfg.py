@@ -121,7 +121,7 @@ _THREE_SLOPES_VELOCITY_RANGES = {
     "perlin_rough_stand": {
         "lin_vel_x": (0.0, 0.0),
         "lin_vel_y": (0.0, 0.0),
-        "ang_vel_z": (0.0, 0.0),
+        "ang_vel_z": (-1.0, 1.0),
     },
     "continuous_slope": {
         "lin_vel_x": (0.3, 2.0),
@@ -839,6 +839,7 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
             mode="reset",
             params={
                 "patch_name": "target",
+                "align_z_to_patch": True,
                 "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
                 "velocity_range": {
                     "x": (-0.2, 0.2),
