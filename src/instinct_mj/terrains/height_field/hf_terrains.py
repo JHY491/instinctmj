@@ -2855,11 +2855,19 @@ def perlin_continuous_hurdle_terrain(difficulty: float, cfg: hf_terrains_cfg.Per
     Flat ground only; BOX geoms are added by the config's overridden
     function() method directly to the MuJoCo spec.
     """
-    del difficulty
-
     sub_width = int(cfg.size[1] / cfg.horizontal_scale)
     sub_length = int(cfg.size[0] / cfg.horizontal_scale)
-    return np.zeros((sub_width, sub_length), dtype=np.int16)
+    hf_raw = np.zeros((sub_width, sub_length), dtype=np.float64)
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        hf_raw += generate_perlin_noise(difficulty, perlin_cfg)
+
+    return np.rint(hf_raw).astype(np.int16)
 
 
 @generate_wall

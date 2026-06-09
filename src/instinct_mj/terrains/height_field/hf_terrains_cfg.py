@@ -1318,10 +1318,7 @@ class PerlinContinuousHurdleTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
     perlin_cfg: PerlinPlaneTerrainCfg | None = None
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
-        # Flat ground only; hurdles are added as BOX geoms in function()
-        sub_width = int(cfg_for_gen.size[1] / cfg_for_gen.horizontal_scale)
-        sub_length = int(cfg_for_gen.size[0] / cfg_for_gen.horizontal_scale)
-        return np.zeros((sub_width, sub_length), dtype=np.int16)
+        return _RAW_PERLIN_CONTINUOUS_HURDLE_TERRAIN_FN(difficulty, cast(PerlinContinuousHurdleTerrainCfg, cfg_for_gen))
 
     def function(
         self,
@@ -1329,7 +1326,7 @@ class PerlinContinuousHurdleTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
         spec: mujoco.MjSpec,
         rng: np.random.Generator,
     ) -> TerrainOutput:
-        # Generate flat ground via parent hfield
+        # Generate ground hfield (optional Perlin overlay) via parent
         output = super().function(difficulty, spec, rng)
 
         # Add hurdle box geoms to the terrain body and output geometries

@@ -243,7 +243,7 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
             body_names=".*_ankle_roll_link",
             points_generator=Grid3dPointsGeneratorCfg(
                 x_min=-0.06,
-                x_max=0.15,
+                x_max=0.18,
                 x_num=10,
                 y_min=-0.05,
                 y_max=0.05,

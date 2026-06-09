@@ -1,4 +1,3 @@
 # AMP motion list for Instinct-Parkour-Adam-Lite-Hurdle-v0.
 selected_files:
-  - walk_retargeted.npz
-  - walk_run_retargeted.npz
+  - hurdle_retargeted.npz

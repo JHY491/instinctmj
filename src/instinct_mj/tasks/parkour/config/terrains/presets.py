@@ -27,6 +27,17 @@ from instinct_mj.terrains.height_field.hf_terrains_cfg import (
 )
 from instinct_mj.terrains.terrain_generator_cfg import FiledTerrainGeneratorCfg
 
+# Light Perlin overlay for structured terrains (hurdle ground, slopes, etc.).
+# Amplitude scales with curriculum difficulty; max height variation is 0.1 m.
+_BASE_LIGHT_PERLIN_CFG = PerlinPlaneTerrainCfg(
+    noise_scale=[0.0, 0.10],
+    noise_frequency=20,
+    fractal_octaves=2,
+    fractal_lacunarity=2.0,
+    fractal_gain=0.25,
+    centering=True,
+)
+
 # ---------------------------------------------------------------------------
 # Legacy presets (multi-type rough curriculum, walls enabled)
 # ---------------------------------------------------------------------------
@@ -671,14 +682,7 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
             hurdle_thickness=0.05,
             hurdle_spacing=1.1,
             hurdle_spacing_range=(1.5, 1.0),
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=(0.10, 0.30),
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
+            perlin_cfg=copy.deepcopy(_BASE_LIGHT_PERLIN_CFG),
             border_width=1.0,
             wall_prob=[0.0, 0.0, 0.0, 0.0],
             wall_height=0.0,
@@ -749,6 +753,9 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
+for _perlin_key in ("continuous_slope", "cross_slope", "symmetrical_slope"):
+    PARKOUR_TERRAIN_CATALOG_CFG.sub_terrains[_perlin_key].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
+PARKOUR_TERRAIN_CATALOG_CFG.sub_terrains["continuous_hurdle"].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
 PARKOUR_TERRAIN_CATALOG_CFG_PLAY = copy.deepcopy(PARKOUR_TERRAIN_CATALOG_CFG)
 PARKOUR_TERRAIN_CATALOG_CFG_PLAY.num_rows = 4
 PARKOUR_TERRAIN_CATALOG_CFG_PLAY.num_cols = 10
@@ -1008,6 +1015,8 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
+for _perlin_key in ("continuous_slope", "cross_slope", "symmetrical_slope"):
+    THREE_SLOPES_TERRAINS_CFG.sub_terrains[_perlin_key].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
 THREE_SLOPES_TERRAINS_CFG_PLAY = copy.deepcopy(THREE_SLOPES_TERRAINS_CFG)
 THREE_SLOPES_TERRAINS_CFG_PLAY.num_rows = 4
 THREE_SLOPES_TERRAINS_CFG_PLAY.num_cols = 10
@@ -1015,15 +1024,6 @@ THREE_SLOPES_TERRAINS_CFG_PLAY.num_cols = 10
 # ---------------------------------------------------------------------------
 # Adam Lite parkour base (rough / stand / pyramid stairs + inv / pyramid slopes)
 # ---------------------------------------------------------------------------
-
-_BASE_LIGHT_PERLIN_CFG = PerlinPlaneTerrainCfg(
-    noise_scale=[0.0, 0.10],
-    noise_frequency=20,
-    fractal_octaves=2,
-    fractal_lacunarity=2.0,
-    fractal_gain=0.25,
-    centering=True,
-)
 
 ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     seed=0,
@@ -1318,14 +1318,7 @@ MIXED_HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             hurdle_thickness=0.05,
             hurdle_spacing=1.1,
             hurdle_spacing_range=(1.5, 1.0),
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=(0.02, 0.10),
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
+            perlin_cfg=copy.deepcopy(_BASE_LIGHT_PERLIN_CFG),
             border_width=1.0,
             wall_prob=[0.0, 0.0, 0.0, 0.0],
             wall_height=0.0,
@@ -1372,14 +1365,7 @@ HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             hurdle_thickness=0.05,
             hurdle_spacing=1.1,
             hurdle_spacing_range=(1.5, 1.0),
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=(0.02, 0.10),
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
+            perlin_cfg=copy.deepcopy(_BASE_LIGHT_PERLIN_CFG),
             border_width=1.0,
             wall_prob=[0.0, 0.0, 0.0, 0.0],
             wall_height=0.0,
