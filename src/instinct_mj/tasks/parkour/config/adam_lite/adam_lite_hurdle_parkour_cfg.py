@@ -1,4 +1,4 @@
-"""Adam Lite hurdle parkour: stand / walk / continuous hurdle, AMP + vision."""
+"""Adam Lite hurdle parkour: continuous hurdle, AMP + vision."""
 
 from __future__ import annotations
 
@@ -47,8 +47,8 @@ from instinct_mj.tasks.mdp import (
 )
 from instinct_mj.tasks.parkour.config.adam_lite.env_cfgs import adam_sp_flat_parkour_env_cfg
 from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
-    MIXED_HURDLE_TERRAINS_CFG,
-    MIXED_HURDLE_TERRAINS_CFG_PLAY,
+    HURDLE_TERRAINS_CFG,
+    HURDLE_TERRAINS_CFG_PLAY,
     _edit_parkour_scene_spec,
 )
 from instinct_mj.terrains.terrain_importer_cfg import TerrainImporterCfg as InstinctTerrainImporterCfg
@@ -117,18 +117,8 @@ motion_reference_cfg = MotionReferenceManagerCfg(
 )
 
 
-# Per-terrain velocity caps; keys must match MIXED_HURDLE_TERRAINS_CFG sub_terrains.
+# Per-terrain velocity caps; keys must match HURDLE_TERRAINS_CFG sub_terrains.
 _HURDLE_VELOCITY_RANGES = {
-    "perlin_rough_stand": {
-        "lin_vel_x": (0.0, 0.0),
-        "lin_vel_y": (0.0, 0.0),
-        "ang_vel_z": (-1.0, 1.0),
-    },
-    "perlin_rough": {
-        "lin_vel_x": (0.3, 1.0),
-        "lin_vel_y": (0.0, 0.0),
-        "ang_vel_z": (-0.5, 0.5),
-    },
     "continuous_hurdle": {
         "lin_vel_x": (0.3, 1.0),
         "lin_vel_y": (0.0, 0.0),
@@ -141,7 +131,7 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Adam Lite parkour on mixed hurdle terrain (stand / walk / hurdle), AMP + vision."""
+    """Adam Lite parkour on continuous hurdle terrain, AMP + vision."""
     cfg = adam_sp_flat_parkour_env_cfg(play=play, has_state_estimation=True)
     setattr(cfg, "monitors", {})
     cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
@@ -160,7 +150,8 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
     cfg.sim.mujoco.multiccd = False
 
 
-    terrain_gen = copy.deepcopy(MIXED_HURDLE_TERRAINS_CFG_PLAY if play else MIXED_HURDLE_TERRAINS_CFG)
+    terrain_gen = copy.deepcopy(HURDLE_TERRAINS_CFG_PLAY if play else HURDLE_TERRAINS_CFG)
+    cast(Any, terrain_gen.sub_terrains["continuous_hurdle"]).virtual_obstacle_keys = ("hurdle_edges",)
     hurdle_edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
         cylinder_radius=0.05,
         min_points=2,
@@ -330,13 +321,12 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
             debug_vis=False,
             velocity_control_stiffness=2.0,
             heading_control_stiffness=2.0,
-            rel_standing_envs=0.1,
+            rel_standing_envs=0.0,
             ranges=PoseVelocityCommandCfg.Ranges(
-                lin_vel_x=(0.0, 0.0),
+                lin_vel_x=(0.3, 1.0),
                 lin_vel_y=(0.0, 0.0),
-                ang_vel_z=(-1.0, 1.0),
+                ang_vel_z=(-0.5, 0.5),
             ),
-            random_velocity_terrain=["perlin_rough_stand"],
             velocity_ranges=copy.deepcopy(_HURDLE_VELOCITY_RANGES),
             only_positive_lin_vel_x=True,
             # When |heading error to target| exceeds this (rad), zero linear command so the robot turns first.
