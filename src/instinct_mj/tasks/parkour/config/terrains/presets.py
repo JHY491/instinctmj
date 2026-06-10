@@ -38,6 +38,13 @@ _BASE_LIGHT_PERLIN_CFG = PerlinPlaneTerrainCfg(
     centering=True,
 )
 
+def _play_cfg(cfg: FiledTerrainGeneratorCfg, rows: int = 4, cols: int = 10) -> FiledTerrainGeneratorCfg:
+    """Return a deepcopy with smaller grid for play/viewer."""
+    play = copy.deepcopy(cfg)
+    play.num_rows = rows
+    play.num_cols = cols
+    return play
+
 # ---------------------------------------------------------------------------
 # Legacy presets (multi-type rough curriculum, walls enabled)
 # ---------------------------------------------------------------------------
@@ -289,9 +296,7 @@ ROUGH_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-ROUGH_TERRAINS_CFG_PLAY = copy.deepcopy(ROUGH_TERRAINS_CFG)
-ROUGH_TERRAINS_CFG_PLAY.num_rows = 4
-ROUGH_TERRAINS_CFG_PLAY.num_cols = 10
+ROUGH_TERRAINS_CFG_PLAY = _play_cfg(ROUGH_TERRAINS_CFG)
 
 NOISE_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     seed=0,
@@ -325,9 +330,7 @@ NOISE_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-NOISE_ONLY_TERRAINS_CFG_PLAY = copy.deepcopy(NOISE_ONLY_TERRAINS_CFG)
-NOISE_ONLY_TERRAINS_CFG_PLAY.num_rows = 4
-NOISE_ONLY_TERRAINS_CFG_PLAY.num_cols = 10
+NOISE_ONLY_TERRAINS_CFG_PLAY = _play_cfg(NOISE_ONLY_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Parkour terrain grid (all sub-types registered with proportion=0 until a preset activates them)
@@ -756,9 +759,7 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
 for _perlin_key in ("continuous_slope", "cross_slope", "symmetrical_slope"):
     PARKOUR_TERRAIN_CATALOG_CFG.sub_terrains[_perlin_key].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
 PARKOUR_TERRAIN_CATALOG_CFG.sub_terrains["continuous_hurdle"].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
-PARKOUR_TERRAIN_CATALOG_CFG_PLAY = copy.deepcopy(PARKOUR_TERRAIN_CATALOG_CFG)
-PARKOUR_TERRAIN_CATALOG_CFG_PLAY.num_rows = 4
-PARKOUR_TERRAIN_CATALOG_CFG_PLAY.num_cols = 10
+PARKOUR_TERRAIN_CATALOG_CFG_PLAY = _play_cfg(PARKOUR_TERRAIN_CATALOG_CFG)
 
 ADAM_LITE_PARKOUR_TERRAINS_CFG = copy.deepcopy(PARKOUR_TERRAIN_CATALOG_CFG)
 for _k in ADAM_LITE_PARKOUR_TERRAINS_CFG.sub_terrains:
@@ -900,9 +901,7 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-STAIRS_ONLY_TERRAINS_CFG_PLAY = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG)
-STAIRS_ONLY_TERRAINS_CFG_PLAY.num_rows = 4
-STAIRS_ONLY_TERRAINS_CFG_PLAY.num_cols = 10
+STAIRS_ONLY_TERRAINS_CFG_PLAY = _play_cfg(STAIRS_ONLY_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Three slopes (training num_cols=20)
@@ -1017,9 +1016,7 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
 )
 for _perlin_key in ("continuous_slope", "cross_slope", "symmetrical_slope"):
     THREE_SLOPES_TERRAINS_CFG.sub_terrains[_perlin_key].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
-THREE_SLOPES_TERRAINS_CFG_PLAY = copy.deepcopy(THREE_SLOPES_TERRAINS_CFG)
-THREE_SLOPES_TERRAINS_CFG_PLAY.num_rows = 4
-THREE_SLOPES_TERRAINS_CFG_PLAY.num_cols = 10
+THREE_SLOPES_TERRAINS_CFG_PLAY = _play_cfg(THREE_SLOPES_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Adam Lite parkour base (rough / stand / pyramid stairs + inv / pyramid slopes)
@@ -1165,9 +1162,7 @@ ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG_PLAY = copy.deepcopy(ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG)
-ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG_PLAY.num_rows = 4
-ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG_PLAY.num_cols = 10
+ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG_PLAY = _play_cfg(ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Adam Lite mixed parkour (base finetune: rough / three slopes / one-sided stairs / slalom deck)
@@ -1221,9 +1216,7 @@ if _mixed_slalom_fp is not None and "target" in _mixed_slalom_fp:
     _mixed_slalom_fp["target"].x_range = (0.0, 1.5)
     _mixed_slalom_fp["target"].y_range = (3.0, 5.0)
 
-ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG_PLAY = copy.deepcopy(ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG)
-ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG_PLAY.num_rows = 4
-ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG_PLAY.num_cols = 10
+ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG_PLAY = _play_cfg(ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Precision navigation: curved bridge + narrow L-corner (X-only velocity)
@@ -1242,10 +1235,8 @@ for _k in BRIDGE_L_CORNER_TERRAINS_CFG.sub_terrains:
 _curved_bridge_cfg = BRIDGE_L_CORNER_TERRAINS_CFG.sub_terrains["curved_bridge"]
 _curved_bridge_cfg.straight_at_zero_difficulty = True
 _curved_bridge_cfg.straight_max_difficulty = 1.0 / float(BRIDGE_L_CORNER_TERRAINS_CFG.num_rows)
-BRIDGE_L_CORNER_TERRAINS_CFG_PLAY = copy.deepcopy(BRIDGE_L_CORNER_TERRAINS_CFG)
+BRIDGE_L_CORNER_TERRAINS_CFG_PLAY = _play_cfg(BRIDGE_L_CORNER_TERRAINS_CFG)
 BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.size = (12.0, 10.0)
-BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.num_rows = 4
-BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.num_cols = 10
 _play_curved_bridge = BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.sub_terrains["curved_bridge"]
 _play_curved_bridge.straight_max_difficulty = 1.0 / float(BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.num_rows)
 
@@ -1336,9 +1327,7 @@ MIXED_HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-MIXED_HURDLE_TERRAINS_CFG_PLAY = copy.deepcopy(MIXED_HURDLE_TERRAINS_CFG)
-MIXED_HURDLE_TERRAINS_CFG_PLAY.num_rows = 4
-MIXED_HURDLE_TERRAINS_CFG_PLAY.num_cols = 10
+MIXED_HURDLE_TERRAINS_CFG_PLAY = _play_cfg(MIXED_HURDLE_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Hurdle terrain (continuous hurdle-only, training num_cols=20)
@@ -1382,9 +1371,7 @@ HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-HURDLE_TERRAINS_CFG_PLAY = copy.deepcopy(HURDLE_TERRAINS_CFG)
-HURDLE_TERRAINS_CFG_PLAY.num_rows = 4
-HURDLE_TERRAINS_CFG_PLAY.num_cols = 10
+HURDLE_TERRAINS_CFG_PLAY = _play_cfg(HURDLE_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Single-terrain presets (play / ablation), cloned from PARKOUR_TERRAIN_CATALOG_CFG
