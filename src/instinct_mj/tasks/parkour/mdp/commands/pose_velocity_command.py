@@ -55,6 +55,7 @@ class PoseVelocityCommand(CommandTerm):
         self.heading_target = torch.zeros(self.num_envs, device=self.device)
         self.max_command_b = torch.zeros(self.num_envs, 3, device=self.device)
         self.is_standing_env = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self._target_reached = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         # -- metrics
         self.metrics["error_vel_xy"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_vel_yaw"] = torch.zeros(self.num_envs, device=self.device)
@@ -542,6 +543,7 @@ class PoseVelocityCommand(CommandTerm):
         ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)
         if ids_t.numel() == 0:
             return
+        self._target_reached[ids_t] = False
 
         if self._guided_mode and self._guided_world is not None:
             counts_e = self._guided_counts_at_envs(ids_t)
@@ -560,6 +562,7 @@ class PoseVelocityCommand(CommandTerm):
         else:
             ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)
         if ids_t.numel() > 0:
+            self._target_reached[ids_t] = False
             self._flat_patch_arrival_hold[ids_t] = 0
             self._flat_patch_seq_terminal[ids_t] = False
             self._flat_patch_idx[ids_t] = 0
@@ -647,18 +650,20 @@ class PoseVelocityCommand(CommandTerm):
             self.ang_vel_z_range[:, 0],
             self.ang_vel_z_range[:, 1],
         )
-        self.vel_command_b[:] *= (target_dist > self._velocity_stop_xy_dist()).unsqueeze(-1)
+        random_velocity_env_ids = self.random_velocity_indices.nonzero(as_tuple=False).flatten()
+        self.vel_command_b[random_velocity_env_ids, 0] = self.random_lin_vel_x[random_velocity_env_ids]
+        self.vel_command_b[random_velocity_env_ids, 1] = self.random_lin_vel_y[random_velocity_env_ids]
+        self.vel_command_b[random_velocity_env_ids, 2] = self.random_ang_vel_z[random_velocity_env_ids]
+
+        stop_dist = self._velocity_stop_xy_dist()
+        self._target_reached |= target_dist <= stop_dist
+        self.vel_command_b[:] *= (~self._target_reached).unsqueeze(-1)
         self.vel_command_b[:, :2] *= (
             (torch.norm(self.vel_command_b[:, :2], dim=1) > self.cfg.lin_vel_threshold).float().unsqueeze(-1)
         )
         self.vel_command_b[:, 2] *= (torch.abs(self.vel_command_b[:, 2]) > self.cfg.ang_vel_threshold).float()
         standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
         self.vel_command_b[standing_env_ids, :] = 0.0
-
-        random_velocity_env_ids = self.random_velocity_indices.nonzero(as_tuple=False).flatten()
-        self.vel_command_b[random_velocity_env_ids, 0] = self.random_lin_vel_x[random_velocity_env_ids]
-        self.vel_command_b[random_velocity_env_ids, 1] = self.random_lin_vel_y[random_velocity_env_ids]
-        self.vel_command_b[random_velocity_env_ids, 2] = self.random_ang_vel_z[random_velocity_env_ids]
 
     def _debug_vis_impl(self, visualizer) -> None:
         """Draw target positions and velocity arrows using MuJoCo geometry.
