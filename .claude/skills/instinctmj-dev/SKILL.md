@@ -142,9 +142,6 @@ Key fields on `FiledTerrainGeneratorCfg`:
 
 | Field | Purpose |
 |-------|---------|
-| `size` | `(x, y)` meters per terrain column |
-| `num_rows × num_cols` | Grid dimensions. 10×20 = 200 tiles for training, 4×10 for play |
-| `horizontal_scale` | hfield cell size in meters (0.07 = 7cm resolution) |
 | `sub_terrains` | Dict of terrain types, keyed by name. `proportion` sums to 1.0 |
 | `curriculum=True` | Enables terrain-level progression via the curriculum manager |
 
@@ -185,38 +182,23 @@ flat_patch_sampling={
 
 ### How Tasks Use Terrain
 
-**Stairs task** (with virtual obstacles):
+General pattern — copy a terrain preset, configure obstacles, wrap in `InstinctTerrainImporterCfg`:
 ```python
-terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG)
-edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(cylinder_radius=0.03, ...)
+terrain_gen = copy.deepcopy(PRESET_CFG)
 cfg.scene.terrain = InstinctTerrainImporterCfg(
-    terrain_type="hacked_generator",
     terrain_generator=terrain_gen,
-    virtual_obstacle_source="mesh",
-    virtual_obstacle_hfield_height_threshold=0.04,  # stairs need threshold for edge detection
-    virtual_obstacles={"edges": edge_obstacle_cfg},
+    virtual_obstacle_hfield_height_threshold=...,  # 0.04 for stairs, None for slopes/hurdles
+    virtual_obstacles={"edges": GreedyconcatEdgeCylinderCfg(cylinder_radius=...)},
 )
 ```
 
-**Slopes task** (no virtual obstacles):
-```python
-terrain_gen = copy.deepcopy(THREE_SLOPES_TERRAINS_CFG)
-cfg.scene.terrain = InstinctTerrainImporterCfg(
-    terrain_generator=terrain_gen,
-    virtual_obstacle_hfield_height_threshold=None,  # slopes: no virtual obstacles
-    virtual_obstacles={},  # empty dict
-)
-```
+Per-task differences:
 
-**Hurdle task** (with virtual obstacles, different cylinder radius):
-```python
-terrain_gen = copy.deepcopy(MIXED_HURDLE_TERRAINS_CFG)
-hurdle_edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(cylinder_radius=0.05, ...)
-cfg.scene.terrain = InstinctTerrainImporterCfg(
-    virtual_obstacle_hfield_height_threshold=None,  # hurdles may have perlin ground below
-    virtual_obstacles={"edges": hurdle_edge_obstacle_cfg},
-)
-```
+| Task | Terrain preset | virtual obstacles | Notes |
+|------|---------------|:-----------------:|-------|
+| Stairs | `STAIRS_ONLY_TERRAINS_CFG` | `cylinder_radius=0.03` | `hfield_threshold=0.04` for stair edge detection |
+| Slopes | `THREE_SLOPES_TERRAINS_CFG` | empty dict | Smooth slopes, no obstacles needed |
+| Hurdle | `MIXED_HURDLE_TERRAINS_CFG` | `cylinder_radius=0.05` | Perlin ground below hurdles, no threshold |
 
 ### Velocity Ranges Per Terrain
 
@@ -283,19 +265,6 @@ cfg.commands = {
 }
 ```
 
-### Key parameters
-
-| Parameter | Purpose |
-|-----------|---------|
-| `resampling_time_range` | How often velocity targets are regenerated |
-| `velocity_control_stiffness` | Position error → linear velocity gain (body frame) |
-| `heading_control_stiffness` | Heading error → angular velocity gain |
-| `rel_standing_envs` | Fraction of envs that get zero velocity (standing still) |
-| `velocity_ranges` | Per-terrain-type velocity limits, keys must match `sub_terrains` names |
-| `random_velocity_terrain` | Terrain types where velocity is randomized (using `ranges` or `velocity_ranges` limits) |
-| `target_dis_threshold` | Distance to target below which velocity is zeroed |
-| `only_positive_lin_vel_x` | Never command backward motion |
-
 ### Observation integration
 
 The velocity command feeds into observations via `generated_commands`:
@@ -337,11 +306,7 @@ guided_resample_velocity_on_advance=True,
 
 ### Per-terrain velocity ranges pattern
 
-The `velocity_ranges` dict maps terrain keys → speed limits. Keys must match `sub_terrains` keys in the terrain preset. `random_velocity_terrain` lists terrain types where velocities are randomized (typically standing terrains for yaw randomization).
-
-**Stairs task** velocities: standing (0, 0, ±1.0) / walking (0.3-1.0, 0, ±0.5)
-**Slopes task** velocities: standing (0, 0, ±1.0) / continuous_slope (0.3-2.0, 0, ±1.0) / cross_slope (0.3-1.0, 0, ±1.0)
-**Hurdle task** velocities: standing (0, 0, ±1.0) / walking (0.3-1.0, 0, ±0.5) / slalom (0.3-1.5, 0, 0)
+`velocity_ranges` dict keys must match `sub_terrains` keys. `random_velocity_terrain` lists terrains using randomized speeds (typically standing terrains for yaw diversity).
 
 ---
 
@@ -371,7 +336,7 @@ class PolicyCfg(InstinctRlEncoderActorCriticCfg):
     critic_encoder_configs = {"depth_encoder": DepthEncoderConv2dCfg()}
 ```
 
-Critic has its **own independent** depth encoder (not shared, not None).
+Critic has its **own independent** depth encoder (not shared, not None) — the critic sees depth-encoded terrain plus privileged `base_lin_vel`, giving it a more complete state view for accurate value estimation.
 
 ---
 
@@ -408,13 +373,12 @@ All proprio, commands, and actions use `history_length=8`. AMP observations use 
 
 ### Observation function parameter convention
 
-| Function | Sensor arg | Type |
-|----------|:----------:|------|
-| `visualizable_image` / `delayed_visualizable_image` | `sensor_cfg` | `SceneEntityCfg("name")` |
-| `height_scan` | `sensor_name` | `str` |
-| `generated_commands` | `command_name` | `str` |
-| `joint_pos_rel` / `joint_vel_rel` | `asset_cfg` | `SceneEntityCfg(name, joint_names=...)` |
-| `base_lin_vel` / `base_ang_vel` | `asset_cfg` (optional) | `SceneEntityCfg("robot")` |
+Most functions take `sensor_cfg` (`SceneEntityCfg`) or `asset_cfg`. Key exceptions:
+
+| Function | Param | Note |
+|----------|-------|------|
+| `height_scan` | `sensor_name="..."` | Takes plain `str`, not `SceneEntityCfg` |
+| `generated_commands` | `command_name="base_velocity"` | Takes plain `str` |
 
 ---
 
