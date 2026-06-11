@@ -714,6 +714,9 @@ def instinct_adam_lite_bridge_l_corner_parkour_env_cfg(
                 "command_name": "base_velocity",
                 "spawn_patch_name": "start",
                 "near_spawn_xy_dist": 0.75,
+                "terminal_sequence_neutral": True,
+                "terminal_sequence_neutral_count": 2,
+                "target_patch_name": "target",
             },
         ),
         "feet_close_xy": RewardTermCfg(

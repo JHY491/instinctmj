@@ -697,6 +697,9 @@ def on_deck(
     near_target_xy_dist: float | None = None,
     spawn_patch_name: str | None = None,
     near_spawn_xy_dist: float | None = None,
+    terminal_sequence_neutral: bool = False,
+    terminal_sequence_neutral_count: int = 2,
+    target_patch_name: str = "target",
 ) -> torch.Tensor:
     """Reward feet on elevated deck (+1/contact foot), penalize ground (-1/contact foot).
 
@@ -747,6 +750,25 @@ def on_deck(
             on_deck_mask * in_contact,
             per_foot,
         )
+
+    if terminal_sequence_neutral and command_name is not None:
+        cmd_term = env.command_manager.get_term(command_name)
+        patch_idx = getattr(cmd_term, "_flat_patch_idx", None)
+        terrain = env.scene.terrain
+        num_valid_by_name = getattr(terrain, "flat_patch_num_valid", None)
+        if patch_idx is not None and isinstance(num_valid_by_name, dict) and target_patch_name in num_valid_by_name:
+            levels = terrain.terrain_levels
+            types = terrain.terrain_types
+            num_valid = num_valid_by_name[target_patch_name][levels, types]
+            terminal_count = max(1, int(terminal_sequence_neutral_count))
+            terminal_start = torch.clamp(num_valid - terminal_count, min=0)
+            terminal_segment = patch_idx >= terminal_start
+            if bool(terminal_segment.any()):
+                per_foot = torch.where(
+                    terminal_segment.unsqueeze(-1),
+                    torch.zeros_like(per_foot),
+                    per_foot,
+                )
 
     return torch.sum(per_foot, dim=1)
 
