@@ -331,6 +331,36 @@ def feet_air_time(
     return reward
 
 
+def yaw_cmd_double_support(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    sensor_name: str,
+    yaw_threshold: float = 0.15,
+    grace_period: float = 0.08,
+    max_penalty_time: float = 0.4,
+    random_velocity_only: bool = False,
+) -> torch.Tensor:
+    """Penalize staying in double support when a yaw command asks the robot to turn."""
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    contact_time = contact_sensor.data.current_contact_time
+    assert contact_time is not None
+
+    cmd = env.command_manager.get_command(command_name)
+    active = torch.abs(cmd[:, 2]) > yaw_threshold
+    if random_velocity_only:
+        cmd_term = env.command_manager.get_term(command_name)
+        random_mask = getattr(cmd_term, "random_velocity_indices", None)
+        if random_mask is None:
+            return torch.zeros(env.num_envs, device=env.device)
+        active = active & random_mask
+
+    in_contact = contact_time > 0.0
+    double_support = torch.sum(in_contact.int(), dim=1) == 2
+    support_time = torch.min(contact_time, dim=1)[0]
+    penalty = torch.clamp(support_time - grace_period, min=0.0, max=max_penalty_time)
+    return penalty * active.float() * double_support.float()
+
+
 def both_feet_air_time(
     env: ManagerBasedRlEnv,
     sensor_name: str,

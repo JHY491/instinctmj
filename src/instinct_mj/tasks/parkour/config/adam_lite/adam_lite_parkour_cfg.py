@@ -580,6 +580,18 @@ def instinct_adam_lite_parkour_env_cfg(
                 "vel_threshold": 0.15,
             },
         ),
+        "yaw_cmd_double_support": RewardTermCfg(
+            func=parkour_mdp.yaw_cmd_double_support,
+            weight=-0.8,
+            params={
+                "command_name": "base_velocity",
+                "sensor_name": "contact_forces",
+                "yaw_threshold": 0.15,
+                "grace_period": 0.08,
+                "max_penalty_time": 0.4,
+                "random_velocity_only": False,
+            },
+        ),
         "feet_slide": RewardTermCfg(
             func=parkour_mdp.feet_slide,
             weight=-0.4,
