@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from mjlab.managers import SceneEntityCfg
+from mjlab.managers.manager_base import ManagerTermBase
 from mjlab.sensor import ContactSensor, RayCastSensor
 from mjlab.utils.lab_api.math import quat_apply, quat_apply_inverse
 
@@ -151,6 +152,152 @@ def stand_still(
     cmd_yaw_abs = torch.abs(cmd[:, 2])
 
     return (dof_error - offset) * (cmd_lin_norm < threshold) * (cmd_yaw_abs < threshold)
+
+
+class hurdle_crossing_reward(ManagerTermBase):
+    """Give a one-shot reward when the base cleanly crosses each hurdle centerline."""
+
+    def __init__(self, cfg: Any, env: ManagerBasedRlEnv):
+        super().__init__(env)
+        self.asset_cfg = cfg.params.get("asset_cfg", SceneEntityCfg("robot"))
+        self.success_margin = float(cfg.params.get("success_margin", 0.10))
+        self.min_forward_vel = float(cfg.params.get("min_forward_vel", 0.25))
+        self.collision_sensor_names = tuple(
+            cfg.params.get("collision_sensor_names", ("leg_volume_points", "shank_volume_points"))
+        )
+        self.collision_tolerance = float(cfg.params.get("collision_tolerance", 1.0e-4))
+
+        terrain = env.scene.terrain
+        terrain_generator = getattr(terrain, "terrain_generator", None)
+        terrain_origins = getattr(terrain, "terrain_origins", None)
+        if terrain_generator is None or terrain_origins is None:
+            raise RuntimeError("hurdle_crossing_reward requires generated parkour terrain.")
+
+        terrain_origins_t = torch.as_tensor(terrain_origins, dtype=torch.float32, device=env.device)
+        num_rows = int(terrain_origins_t.shape[0])
+        num_cols = int(terrain_origins_t.shape[1])
+        max_hurdles = 0
+        hurdle_centers: list[list[list[float]]] = []
+        hurdle_counts: list[list[int]] = []
+        for row in range(num_rows):
+            centers_row: list[list[float]] = []
+            counts_row: list[int] = []
+            for col in range(num_cols):
+                sub_cfg = terrain_generator.get_subterrain_cfg(row, col)
+                count = int(getattr(sub_cfg, "num_hurdles", 0) or 0)
+                centers = self._hurdle_centers_world_x(sub_cfg, terrain_origins_t[row, col, 0])
+                centers_row.append(centers)
+                counts_row.append(count)
+                max_hurdles = max(max_hurdles, len(centers))
+            hurdle_centers.append(centers_row)
+            hurdle_counts.append(counts_row)
+
+        if max_hurdles <= 0:
+            raise RuntimeError("hurdle_crossing_reward did not find any hurdle sub-terrain configs.")
+
+        centers_tensor = torch.zeros((num_rows, num_cols, max_hurdles), dtype=torch.float32, device=env.device)
+        counts_tensor = torch.zeros((num_rows, num_cols), dtype=torch.long, device=env.device)
+        for row in range(num_rows):
+            for col in range(num_cols):
+                centers = hurdle_centers[row][col]
+                count = len(centers)
+                counts_tensor[row, col] = count
+                if count > 0:
+                    centers_tensor[row, col, :count] = torch.tensor(centers, dtype=torch.float32, device=env.device)
+        self.hurdle_centers_x_w = centers_tensor
+        self.hurdle_counts = counts_tensor
+        self.prev_root_x_w = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+        self.next_hurdle_idx = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+        self._initialized = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    @staticmethod
+    def _hurdle_centers_world_x(sub_cfg: object, terrain_origin_x_w: torch.Tensor) -> list[float]:
+        count = int(getattr(sub_cfg, "num_hurdles", 0) or 0)
+        if count <= 0:
+            return []
+        difficulty = float(getattr(sub_cfg, "difficulty", 0.0))
+        thickness = float(getattr(sub_cfg, "hurdle_thickness"))
+        spacing = float(getattr(sub_cfg, "hurdle_spacing"))
+        spacing_range = getattr(sub_cfg, "hurdle_spacing_range", None)
+        if spacing_range is not None:
+            lo, hi = spacing_range
+            spacing = float(lo) + difficulty * (float(hi) - float(lo))
+
+        size_x = float(getattr(sub_cfg, "size")[0])
+        half_thick = 0.5 * thickness
+        total_length = count * thickness + (count - 1) * spacing
+        x_start = 0.5 * (size_x - total_length)
+        tile_corner_x_w = float(terrain_origin_x_w.item()) - 0.5 * size_x
+        return [
+            tile_corner_x_w + x_start + i * (thickness + spacing) + half_thick
+            for i in range(count)
+        ]
+
+    def reset(self, env_ids: torch.Tensor | slice | None) -> None:
+        if env_ids is None:
+            env_ids = slice(None)
+        asset = self._env.scene[self.asset_cfg.name]
+        root_x = asset.data.root_link_pos_w[env_ids, 0]
+        self.prev_root_x_w[env_ids] = root_x
+        self.next_hurdle_idx[env_ids] = self._next_hurdle_index(env_ids, root_x)
+        self._initialized[env_ids] = True
+
+    def _next_hurdle_index(self, env_ids: torch.Tensor | slice, root_x: torch.Tensor) -> torch.Tensor:
+        terrain = self._env.scene.terrain
+        levels = terrain.terrain_levels[env_ids]
+        cols = terrain.terrain_types[env_ids]
+        centers = self.hurdle_centers_x_w[levels, cols]
+        counts = self.hurdle_counts[levels, cols]
+        passed = torch.sum(root_x.unsqueeze(-1) >= centers + self.success_margin, dim=1)
+        return torch.minimum(passed.to(torch.long), counts)
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        success_margin: float = 0.10,
+        min_forward_vel: float = 0.25,
+        collision_sensor_names: tuple[str, ...] = ("leg_volume_points", "shank_volume_points"),
+        collision_tolerance: float = 1.0e-4,
+    ) -> torch.Tensor:
+        del asset_cfg, success_margin, min_forward_vel, collision_sensor_names, collision_tolerance
+        asset = env.scene[self.asset_cfg.name]
+        root_x = asset.data.root_link_pos_w[:, 0]
+        uninitialized = ~self._initialized
+        reset_like = root_x + 0.5 < self.prev_root_x_w
+        refresh = uninitialized | reset_like
+        if bool(refresh.any()):
+            env_ids = refresh.nonzero(as_tuple=False).flatten()
+            self.prev_root_x_w[env_ids] = root_x[env_ids]
+            self.next_hurdle_idx[env_ids] = self._next_hurdle_index(env_ids, root_x[env_ids])
+            self._initialized[env_ids] = True
+
+        terrain = env.scene.terrain
+        levels = terrain.terrain_levels
+        cols = terrain.terrain_types
+        counts = self.hurdle_counts[levels, cols]
+        active = self.next_hurdle_idx < counts
+        idx = torch.clamp(self.next_hurdle_idx, max=self.hurdle_centers_x_w.shape[2] - 1)
+        next_center_x = self.hurdle_centers_x_w[levels, cols, idx]
+        crossed = active & (self.prev_root_x_w < next_center_x) & (root_x >= next_center_x + self.success_margin)
+        moving_forward = asset.data.root_link_lin_vel_b[:, 0] >= self.min_forward_vel
+        clean = self._clean_hurdle_crossing(env)
+        reward = (crossed & moving_forward & clean).float()
+
+        self.next_hurdle_idx = torch.where(crossed, torch.minimum(self.next_hurdle_idx + 1, counts), self.next_hurdle_idx)
+        self.prev_root_x_w[:] = root_x
+        return reward
+
+    def _clean_hurdle_crossing(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        clean = torch.ones(env.num_envs, dtype=torch.bool, device=env.device)
+        for sensor_name in self.collision_sensor_names:
+            sensor = env.scene.sensors[sensor_name]
+            penetration = torch.linalg.vector_norm(
+                sensor.data.penetration_offset.reshape(env.num_envs, -1, 3),
+                dim=-1,
+            )
+            clean &= torch.max(penetration, dim=1)[0] <= self.collision_tolerance
+        return clean
 
 
 def feet_air_time(

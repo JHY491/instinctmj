@@ -611,6 +611,17 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
             weight=-5.0,
             params={"sensor_name": "shank_volume_points"},
         ),
+        "hurdle_crossing": RewardTermCfg(
+            func=parkour_mdp.hurdle_crossing_reward,
+            weight=1.5,
+            params={
+                "asset_cfg": SceneEntityCfg("robot"),
+                "success_margin": 0.10,
+                "min_forward_vel": 0.25,
+                "collision_sensor_names": ("leg_volume_points", "shank_volume_points"),
+                "collision_tolerance": 1.0e-4,
+            },
+        ),
         "feet_air_time": RewardTermCfg(
             func=parkour_mdp.feet_air_time,
             weight=0.5,
