@@ -3,6 +3,7 @@ from .hf_terrains_cfg import (
     PerlinContinuousSlopeTerrainCfg,
     PerlinCrossSlopeTerrainCfg,
     PerlinCrossStoneTerrainCfg,
+    PerlinChainedStraightBridgeTerrainCfg,
     PerlinCurvedBridgeTerrainCfg,
     PerlinContinuousHurdleTerrainCfg,
     PerlinNarrowLCornerTerrainCfg,

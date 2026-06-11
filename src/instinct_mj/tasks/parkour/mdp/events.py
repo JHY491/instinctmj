@@ -207,6 +207,15 @@ def reset_root_state_from_flat_patches(
     else:
         patch_ids = torch.randint(0, num_patches, (len(env_ids),), device=env.device)
 
+    tgen = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+    fixed_seq_cols = terrain_column_target_uses_fixed_sequence_flat_patch(tgen)
+    if fixed_seq_cols:
+        ncol = int(patches.shape[1])
+        col_flags = torch.tensor(fixed_seq_cols, dtype=torch.bool, device=env.device)
+        if col_flags.shape[0] == ncol:
+            on_fixed_seq = col_flags[types]
+            patch_ids = torch.where(on_fixed_seq, torch.zeros_like(patch_ids), patch_ids)
+
     positions = patches[levels, types, patch_ids]
 
     asset: Entity = env.scene[asset_cfg.name]

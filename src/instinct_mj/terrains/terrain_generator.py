@@ -439,9 +439,19 @@ class FiledTerrainGenerator(TerrainGenerator):
         mesh_names_before = {m.name for m in spec.meshes}
         hfield_names_before = {h.name for h in spec.hfields}
 
+        cfg_gen = copy.deepcopy(cfg)
+        from instinct_mj.terrains.height_field.hf_terrains import narrow_l_corner_resolve_railing_side
+        from instinct_mj.terrains.height_field.hf_terrains_cfg import PerlinNarrowLCornerTerrainCfg
+
+        if isinstance(cfg_gen, PerlinNarrowLCornerTerrainCfg) and cfg_gen.railing_side == "random":
+            tile_rng = np.random.default_rng(
+                (int(self.cfg.seed) * 1_000_003 + int(sub_row) * 1_003 + int(sub_col) * 917) % (2**32)
+            )
+            cfg_gen.railing_side = narrow_l_corner_resolve_railing_side(cfg_gen, tile_rng)
+
         # Inline mjlab.TerrainGenerator._create_terrain_geom so we can keep
         # direct access to sub-terrain output for mesh-based virtual obstacles.
-        output = cfg.function(difficulty, spec, self.np_rng)
+        output = cfg_gen.function(difficulty, spec, self.np_rng)
         for terrain_geom in output.geometries:
             if terrain_geom.geom is not None:
                 terrain_geom.geom.pos = np.array(terrain_geom.geom.pos) + world_position
@@ -554,7 +564,7 @@ class FiledTerrainGenerator(TerrainGenerator):
                     self._terrain_meshes.append(hfield_world_mesh)
         # >>> NOTE: This code snippet is copied from the super implementation because they copied the cfg
         # but we need to store the modified cfg for each subterrain.
-        cfg = copy.deepcopy(cfg)
+        cfg = copy.deepcopy(cfg_gen)
         # add other parameters to the sub-terrain configuration
         cfg.difficulty = float(difficulty)
         cfg.seed = self.cfg.seed

@@ -11,6 +11,7 @@ from instinct_mj.terrains.height_field.hf_terrains_cfg import (
     PerlinContinuousHurdleTerrainCfg,
     PerlinContinuousSlopeTerrainCfg,
     PerlinCrossSlopeTerrainCfg,
+    PerlinChainedStraightBridgeTerrainCfg,
     PerlinCurvedBridgeTerrainCfg,
     PerlinDiscreteObstaclesTerrainCfg,
     PerlinInvertedPyramidSlopedTerrainCfg,
@@ -37,6 +38,70 @@ _BASE_LIGHT_PERLIN_CFG = PerlinPlaneTerrainCfg(
     fractal_gain=0.25,
     centering=True,
 )
+
+
+def _bridge_deck_endpoint_flat_patches() -> dict[str, FixedSequenceFlatPatchSamplingCfg]:
+    """Spawn/target on ground before the bridge entry and after the exit (not on the deck)."""
+    return {
+        "start": FixedSequenceFlatPatchSamplingCfg(
+            num_patches=1,
+            patch_radius=[0.10],
+            max_height_diff=0.05,
+            x_range=(0.0, 0.0),
+            y_range=(0.0, 0.0),
+            centerline_endpoint="start",
+            centerline_arc_offset_m=0.0,
+            centerline_spawn_on_ground=True,
+            centerline_ground_approach_m=0.75,
+            centerline_ground_offset_m=(0.0, 0.0),
+        ),
+        "target": FixedSequenceFlatPatchSamplingCfg(
+            num_patches=1,
+            patch_radius=[0.10],
+            max_height_diff=0.05,
+            x_range=(0.0, 0.0),
+            y_range=(0.0, 0.0),
+            centerline_endpoint="end",
+            centerline_spawn_on_ground=True,
+            centerline_tangent_offset_m=1.5,
+            centerline_ground_approach_m=1.5,
+            centerline_ground_offset_m=(0.0, 0.0),
+        ),
+    }
+
+
+def _chained_straight_bridge_flat_patches() -> dict[str, FixedSequenceFlatPatchSamplingCfg]:
+    return _bridge_deck_endpoint_flat_patches()
+
+
+def _chained_straight_bridge_subcfg(
+    *,
+    num_segments: int,
+    segment_gap_m: float,
+    segment_length_m: float = 2.5,
+    segment_turns_deg: tuple[float, ...] | None = None,
+) -> PerlinChainedStraightBridgeTerrainCfg:
+    return PerlinChainedStraightBridgeTerrainCfg(
+        proportion=0.0,
+        bridge_width=0.5,
+        bridge_width_range=(1.0, 0.5),
+        bridge_height=0.1,
+        num_segments_range=(num_segments, num_segments),
+        segment_length_m=segment_length_m,
+        segment_length_range=None,
+        segment_gap_m=segment_gap_m,
+        segment_turns_deg=segment_turns_deg,
+        turn_angle_range=(18.0, 32.0) if segment_turns_deg is None else (0.0, 0.0),
+        entrance_approach_m=0.0,
+        entrance_ramp_m=0.0,
+        exit_approach_m=0.0,
+        border_width=1.0,
+        wall_prob=[0.0, 0.0, 0.0, 0.0],
+        wall_height=0.0,
+        wall_thickness=0.05,
+        flat_patch_sampling=_chained_straight_bridge_flat_patches(),
+    )
+
 
 def _play_cfg(cfg: FiledTerrainGeneratorCfg, rows: int = 4, cols: int = 10) -> FiledTerrainGeneratorCfg:
     """Return a deepcopy with smaller grid for play/viewer."""
@@ -548,7 +613,7 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
         ),
         "curved_bridge": PerlinCurvedBridgeTerrainCfg(
             proportion=0.0,
-            bridge_length=10.0,
+            bridge_length=7.0,
             bridge_width=0.5,
             bridge_width_range=(1.0, 0.5),
             bridge_height=0.1,
@@ -559,41 +624,16 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
             wall_prob=[0.0, 0.0, 0.0, 0.0],
             wall_height=0.0,
             wall_thickness=0.05,
-            flat_patch_sampling={
-                "start": FixedSequenceFlatPatchSamplingCfg(
-                    num_patches=1,
-                    patch_radius=[0.10],
-                    max_height_diff=0.05,
-                    x_range=(0.0, 0.0),
-                    y_range=(0.0, 0.0),
-                    centerline_endpoint="start",
-                    centerline_arc_offset_m=0.0,
-                    centerline_spawn_on_ground=True,
-                    centerline_ground_approach_m=0.75,
-                    centerline_ground_offset_m=(0.0, 0.0),
-                ),
-                "target": FixedSequenceFlatPatchSamplingCfg(
-                    num_patches=1,
-                    patch_radius=[0.10],
-                    max_height_diff=0.05,
-                    x_range=(0.0, 0.0),
-                    y_range=(0.0, 0.0),
-                    centerline_endpoint="end",
-                    centerline_spawn_on_ground=True,
-                    centerline_tangent_offset_m=1.0,
-                    centerline_ground_approach_m=0.75,
-                    centerline_ground_offset_m=(0.0, 0.0),
-                ),
-            },
+            flat_patch_sampling=_bridge_deck_endpoint_flat_patches(),
         ),
         "narrow_l_corner": PerlinNarrowLCornerTerrainCfg(
             proportion=0.0,
             leg_length=4.0,
             channel_width=0.6,
             channel_width_range=(1.0, 0.6),
+            channel_width_max_difficulty=0.5,
             deck_height=0.3,
-            deck_height_range=(0.1, 0.3),
-            turn_angle_range=(0.0, 90.0),
+            turn_angle_range=(90.0, 90.0),
             railing_side="random",
             railing_height=1.2,
             railing_spacing=0.25,
@@ -634,11 +674,12 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
         "narrow_l_corner_right": PerlinNarrowLCornerTerrainCfg(
             proportion=0.0,
             leg_length=4.0,
+            channel_width=0.6,
             channel_width_range=(1.0, 0.6),
+            channel_width_max_difficulty=0.5,
             deck_height=0.3,
-            deck_height_range=(0.1, 0.3),
             turn="right",
-            turn_angle_range=(0.0, 90.0),
+            turn_angle_range=(90.0, 90.0),
             railing_side="random",
             railing_height=1.2,
             railing_spacing=0.25,
@@ -675,6 +716,31 @@ PARKOUR_TERRAIN_CATALOG_CFG = FiledTerrainGeneratorCfg(
                     centerline_ground_offset_m=(0.0, 0.0),
                 ),
             },
+        ),
+        "chained_straight_bridge": PerlinChainedStraightBridgeTerrainCfg(
+            proportion=0.0,
+            bridge_width=0.5,
+            bridge_width_range=(1.0, 0.5),
+            bridge_height=0.1,
+            num_segments_range=(2, 4),
+            segment_length_m=2.5,
+            segment_length_range=(2.8, 2.0),
+            segment_gap_m=0.20,
+            turn_angle_range=(18.0, 32.0),
+            entrance_approach_m=0.0,
+            entrance_ramp_m=0.0,
+            exit_approach_m=0.0,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling=_chained_straight_bridge_flat_patches(),
+        ),
+        "chained_straight_bridge_4": _chained_straight_bridge_subcfg(
+            num_segments=4,
+            segment_gap_m=0.18,
+            segment_length_m=1.5,
+            segment_turns_deg=(22.0, -22.0, 22.0),
         ),
         "continuous_hurdle": PerlinContinuousHurdleTerrainCfg(
             proportion=0.0,
@@ -1241,6 +1307,29 @@ _play_curved_bridge = BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.sub_terrains["curved_bri
 _play_curved_bridge.straight_max_difficulty = 1.0 / float(BRIDGE_L_CORNER_TERRAINS_CFG_PLAY.num_rows)
 
 # ---------------------------------------------------------------------------
+# Bridge mix: modular straight bridges + S-curve + L-corners (column rotation)
+# ---------------------------------------------------------------------------
+
+_BRIDGE_MIX_PROPORTIONS: dict[str, float] = {
+    "chained_straight_bridge_4": 0.25,
+    "curved_bridge": 0.25,
+    "narrow_l_corner": 0.25,
+    "narrow_l_corner_right": 0.25,
+}
+
+CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG = copy.deepcopy(PARKOUR_TERRAIN_CATALOG_CFG)
+CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.size = (12.0, 10.0)
+for _k in CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains:
+    CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains[_k].proportion = _BRIDGE_MIX_PROPORTIONS.get(_k, 0.0)
+_mix_curved_bridge = CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains["curved_bridge"]
+_mix_curved_bridge.straight_at_zero_difficulty = True
+_mix_curved_bridge.straight_max_difficulty = 1.0 / float(CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.num_rows)
+CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY = _play_cfg(CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG)
+CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY.size = (12.0, 10.0)
+_play_mix_curved_bridge = CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY.sub_terrains["curved_bridge"]
+_play_mix_curved_bridge.straight_max_difficulty = 1.0 / float(CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY.num_rows)
+
+# ---------------------------------------------------------------------------
 # Mixed hurdle (stand / walk / continuous hurdle, training num_cols=20)
 # ---------------------------------------------------------------------------
 
@@ -1390,6 +1479,18 @@ SYMMETRICAL_SLOPE_TERRAIN_CFG = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG
 SYMMETRICAL_SLOPE_TERRAIN_CFG_PLAY = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG_PLAY, "symmetrical_slope")
 CURVED_BRIDGE_TERRAIN_CFG = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG, "curved_bridge")
 CURVED_BRIDGE_TERRAIN_CFG_PLAY = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG_PLAY, "curved_bridge")
+CHAINED_STRAIGHT_BRIDGE_TERRAIN_CFG = _with_single_terrain(
+    PARKOUR_TERRAIN_CATALOG_CFG, "chained_straight_bridge_4"
+)
+CHAINED_STRAIGHT_BRIDGE_TERRAIN_CFG_PLAY = _with_single_terrain(
+    PARKOUR_TERRAIN_CATALOG_CFG_PLAY, "chained_straight_bridge_4"
+)
+CHAINED_STRAIGHT_BRIDGE_4_TERRAIN_CFG = _with_single_terrain(
+    PARKOUR_TERRAIN_CATALOG_CFG, "chained_straight_bridge_4"
+)
+CHAINED_STRAIGHT_BRIDGE_4_TERRAIN_CFG_PLAY = _with_single_terrain(
+    PARKOUR_TERRAIN_CATALOG_CFG_PLAY, "chained_straight_bridge_4"
+)
 CONTINUOUS_HURDLE_TERRAIN_CFG = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG, "continuous_hurdle")
 CONTINUOUS_HURDLE_TERRAIN_CFG_PLAY = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG_PLAY, "continuous_hurdle")
 SLALOM_POLE_TERRAIN_CFG = _with_single_terrain(PARKOUR_TERRAIN_CATALOG_CFG, "slalom_pole")

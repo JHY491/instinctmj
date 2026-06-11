@@ -2361,10 +2361,12 @@ def curved_bridge_centerline_patch(
                 ground_approach_m=forward_m,
                 ground_offset_m=ground_offset_m,
             )
-        else:
+        elif abs(forward_m) > 1.0e-6:
             x_m, y_m = _curved_bridge_along_tangent_xy(
                 deck_x, deck_y, yaw, forward_m, ground_offset_m
             )
+        else:
+            x_m, y_m = deck_x, deck_y
     else:
         x_m, y_m = deck_x, deck_y
 
@@ -2412,6 +2414,426 @@ def perlin_curved_bridge_terrain(difficulty: float, cfg: hf_terrains_cfg.PerlinC
         min_dist = np.sqrt(np.min(dist2, axis=0))
         mask = min_dist <= half_width_m
         hf_raw[r, mask] = bridge_height_i
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        perlin_noise = generate_perlin_noise(difficulty, perlin_cfg)
+        hf_raw += perlin_noise
+
+    return np.rint(hf_raw).astype(np.int16)
+
+
+def chained_straight_bridge_resolve_num_segments(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+) -> int:
+    lo, hi = cfg.num_segments_range
+    count = int(round(float(lo) + float(difficulty) * (float(hi) - float(lo))))
+    return max(2, count)
+
+
+def chained_straight_bridge_resolve_segment_length_m(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+) -> float:
+    if cfg.segment_length_range is not None:
+        lo, hi = cfg.segment_length_range
+        return float(lo + float(difficulty) * (float(hi) - float(lo)))
+    return float(cfg.segment_length_m)
+
+
+def chained_straight_bridge_resolve_bridge_width_m(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+) -> float:
+    if cfg.bridge_width_range is not None:
+        lo, hi = cfg.bridge_width_range
+        return float(lo + float(difficulty) * (float(hi) - float(lo)))
+    return float(cfg.bridge_width)
+
+
+def chained_straight_bridge_resolve_turn_deg(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+    joint_index: int,
+) -> float:
+    if cfg.segment_turns_deg is not None:
+        turns = cfg.segment_turns_deg
+        if joint_index < len(turns):
+            return float(turns[joint_index])
+        return 0.0
+    lo, hi = cfg.turn_angle_range
+    t = float(difficulty)
+    sign = 1.0 if joint_index % 2 == 0 else -1.0
+    return sign * float(lo + t * (float(hi) - float(lo)))
+
+
+def chained_straight_bridge_compute_segments(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+    *,
+    tile_size: tuple[float, float],
+) -> list[tuple[float, float, float, float]]:
+    """Return deck segments as (start_x, start_y, heading_rad, length_m); no overlap between decks."""
+    tile_x = float(tile_size[0])
+    tile_y = float(tile_size[1])
+    num_segments = chained_straight_bridge_resolve_num_segments(difficulty, cfg)
+    seg_len = chained_straight_bridge_resolve_segment_length_m(difficulty, cfg)
+    gap_m = float(cfg.segment_gap_m)
+
+    x = 1.0
+    y = 0.5 * tile_y
+    heading = 0.0
+    segments: list[tuple[float, float, float, float]] = []
+
+    for i in range(num_segments):
+        cos_h = math.cos(heading)
+        sin_h = math.sin(heading)
+        length_m = float(seg_len)
+        if abs(cos_h) > 1.0e-3:
+            max_len_x = (tile_x - 0.5 - x) / cos_h if cos_h > 0.0 else length_m
+            length_m = min(length_m, max(0.5, max_len_x))
+        if abs(sin_h) > 1.0e-3:
+            max_len_y = (tile_y - 0.5 - y) / sin_h if sin_h > 0.0 else length_m
+            max_len_y_neg = (y - 0.5) / (-sin_h) if sin_h < 0.0 else length_m
+            length_m = min(length_m, max(0.5, max_len_y), max(0.5, max_len_y_neg))
+
+        segments.append((float(x), float(y), float(heading), float(length_m)))
+        end_x = x + length_m * cos_h
+        end_y = y + length_m * sin_h
+        if i >= num_segments - 1:
+            break
+        turn_deg = chained_straight_bridge_resolve_turn_deg(difficulty, cfg, i)
+        gap_x = end_x + gap_m * cos_h
+        gap_y = end_y + gap_m * sin_h
+        heading = heading + math.radians(turn_deg)
+        x, y = gap_x, gap_y
+
+    return segments
+
+
+def chained_straight_bridge_segment_centerline_xy(
+    start_x: float,
+    start_y: float,
+    heading_rad: float,
+    length_m: float,
+    *,
+    num_samples: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    n = max(2, int(num_samples))
+    t = np.linspace(0.0, 1.0, n, dtype=np.float64)
+    cos_h = math.cos(float(heading_rad))
+    sin_h = math.sin(float(heading_rad))
+    cx = float(start_x) + t * float(length_m) * cos_h
+    cy = float(start_y) + t * float(length_m) * sin_h
+    return cx, cy
+
+
+def chained_straight_bridge_build_path_xy(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+    *,
+    tile_size: tuple[float, float] | None = None,
+    samples_per_meter: int = 40,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Walk path polyline: deck segments plus ground gaps between modules."""
+    sub_size = tile_size if tile_size is not None else (float(cfg.size[0]), float(cfg.size[1]))
+    segments = chained_straight_bridge_compute_segments(difficulty, cfg, tile_size=sub_size)
+    gap_m = float(cfg.segment_gap_m)
+    cx_parts: list[np.ndarray] = []
+    cy_parts: list[np.ndarray] = []
+
+    for i, (sx, sy, heading, length_m) in enumerate(segments):
+        n = max(2, int(round(float(length_m) * float(samples_per_meter))))
+        seg_x, seg_y = chained_straight_bridge_segment_centerline_xy(
+            sx, sy, heading, length_m, num_samples=n
+        )
+        if len(cx_parts) > 0:
+            seg_x = seg_x[1:]
+            seg_y = seg_y[1:]
+        cx_parts.append(seg_x)
+        cy_parts.append(seg_y)
+
+        if i >= len(segments) - 1 or gap_m <= 0.0:
+            continue
+        cos_h = math.cos(float(heading))
+        sin_h = math.sin(float(heading))
+        end_x = float(sx) + float(length_m) * cos_h
+        end_y = float(sy) + float(length_m) * sin_h
+        n_gap = max(2, int(round(gap_m * float(samples_per_meter))))
+        gt = np.linspace(0.0, 1.0, n_gap, dtype=np.float64)[1:]
+        gap_x = end_x + gt * gap_m * cos_h
+        gap_y = end_y + gt * gap_m * sin_h
+        cx_parts.append(gap_x)
+        cy_parts.append(gap_y)
+
+    if len(cx_parts) == 0:
+        return np.zeros(2, dtype=np.float64), np.zeros(2, dtype=np.float64)
+    return np.concatenate(cx_parts), np.concatenate(cy_parts)
+
+
+def _chained_straight_bridge_point_in_deck_box(
+    x_m: float,
+    y_m: float,
+    *,
+    start_x: float,
+    start_y: float,
+    cos_h: float,
+    sin_h: float,
+    length_m: float,
+    half_width_m: float,
+) -> bool:
+    dx = float(x_m) - float(start_x)
+    dy = float(y_m) - float(start_y)
+    along = dx * cos_h + dy * sin_h
+    across = abs(-dx * sin_h + dy * cos_h)
+    return 0.0 <= along <= float(length_m) and across <= float(half_width_m)
+
+
+def _rasterize_oriented_deck_box(
+    hf_raw: np.ndarray,
+    start_x: float,
+    start_y: float,
+    heading_rad: float,
+    length_m: float,
+    *,
+    horizontal_scale: float,
+    half_width_m: float,
+    bridge_height_i: int,
+) -> None:
+    """Stamp one straight deck module as a uniform-height oriented rectangle (no rounded caps)."""
+    hs = float(horizontal_scale)
+    ny, nx = hf_raw.shape
+    cos_h = math.cos(float(heading_rad))
+    sin_h = math.sin(float(heading_rad))
+    deck_z = float(bridge_height_i)
+    deck_threshold = 0.5 * deck_z
+
+    for row in range(ny):
+        y_m = row * hs
+        for col in range(nx):
+            x_m = col * hs
+            if hf_raw[row, col] >= deck_threshold:
+                continue
+            if _chained_straight_bridge_point_in_deck_box(
+                x_m,
+                y_m,
+                start_x=start_x,
+                start_y=start_y,
+                cos_h=cos_h,
+                sin_h=sin_h,
+                length_m=length_m,
+                half_width_m=half_width_m,
+            ):
+                hf_raw[row, col] = deck_z
+
+
+def _chained_straight_bridge_stamp_entrance_exit(
+    hf_raw: np.ndarray,
+    segments: list[tuple[float, float, float, float]],
+    *,
+    horizontal_scale: float,
+    bridge_width_m: float,
+    bridge_height_i: int,
+    entrance_approach_m: float,
+    entrance_ramp_m: float,
+    exit_approach_m: float,
+) -> None:
+    """Optional flat approach pads and entrance/exit ramps on ground only (never over deck boxes)."""
+    if len(segments) == 0:
+        return
+    ramp_m = float(entrance_ramp_m)
+    approach_m = float(entrance_approach_m)
+    exit_m = float(exit_approach_m)
+    if ramp_m <= 0.0 and approach_m <= 0.0 and exit_m <= 0.0:
+        return
+    hs = float(horizontal_scale)
+    ny, nx = hf_raw.shape
+    half_w = 0.5 * float(bridge_width_m)
+    deck_threshold = 0.5 * float(bridge_height_i)
+
+    sx0, sy0, h0, _len0 = segments[0]
+    tx0, ty0 = math.cos(float(h0)), math.sin(float(h0))
+
+    sex, sey, sh, slen = segments[-1]
+    tex, tey = math.cos(float(sh)), math.sin(float(sh))
+    end_x = float(sex) + float(slen) * tex
+    end_y = float(sey) + float(slen) * tey
+
+    for row in range(ny):
+        y_m = row * hs
+        for col in range(nx):
+            if hf_raw[row, col] >= deck_threshold:
+                continue
+            x_m = col * hs
+
+            dx = x_m - float(sx0)
+            dy = y_m - float(sy0)
+            along_in = -(dx * tx0 + dy * ty0)
+            across_in = abs(-dx * ty0 + dy * tx0)
+            if across_in <= half_w and 0.0 <= along_in <= ramp_m + approach_m:
+                if along_in <= ramp_m:
+                    t = 1.0 - along_in / ramp_m
+                    hf_raw[row, col] = float(bridge_height_i) * t
+                else:
+                    hf_raw[row, col] = 0.0
+                continue
+
+            dx_out = x_m - end_x
+            dy_out = y_m - end_y
+            along_out = dx_out * tex + dy_out * tey
+            across_out = abs(-dx_out * tey + dy_out * tex)
+            if across_out <= half_w and 0.0 <= along_out <= exit_m:
+                hf_raw[row, col] = 0.0
+
+
+def _rasterize_bridge_centerline_to_hfield(
+    hf_raw: np.ndarray,
+    cx: np.ndarray,
+    cy: np.ndarray,
+    *,
+    horizontal_scale: float,
+    half_width_m: float,
+    bridge_height_i: int,
+) -> None:
+    hs = float(horizontal_scale)
+    ny, nx = hf_raw.shape
+    half_width_px = max(1, int(round(half_width_m / hs)))
+    half_width_m = half_width_px * hs
+    for row in range(ny):
+        row_y = row * hs
+        dx = cx[:, np.newaxis] - (np.arange(nx) * hs)[np.newaxis, :]
+        dy = cy[:, np.newaxis] - row_y
+        dist2 = dx * dx + dy * dy
+        min_dist = np.sqrt(np.min(dist2, axis=0))
+        mask = min_dist <= half_width_m
+        hf_raw[row, mask] = bridge_height_i
+
+
+def chained_straight_bridge_centerline_patch(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+    *,
+    heights_i16: np.ndarray,
+    heights_phys: np.ndarray,
+    z_offset: float,
+    endpoint: str,
+    terrain_size: tuple[float, float] | None = None,
+    border_xy: tuple[float, float] = (0.0, 0.0),
+    arc_offset_m: float = 0.0,
+    spawn_on_ground: bool = False,
+    ground_approach_m: float = 0.75,
+    ground_offset_m: tuple[float, float] = (0.0, 0.0),
+    tangent_offset_m: float | None = None,
+) -> np.ndarray:
+    del heights_phys, z_offset
+    sub_size = terrain_size if terrain_size is not None else (float(cfg.size[0]), float(cfg.size[1]))
+    cx, cy = chained_straight_bridge_build_path_xy(difficulty, cfg, tile_size=sub_size)
+    from_start = endpoint == "start"
+    deck_index = _centerline_index_at_arc_offset(cx, cy, float(arc_offset_m), from_start=from_start)
+    bx, by = float(border_xy[0]), float(border_xy[1])
+    deck_x = float(cx[deck_index]) + bx
+    deck_y = float(cy[deck_index]) + by
+
+    yaw = curved_bridge_centerline_yaw(cx, cy, deck_index)
+    if spawn_on_ground and endpoint == "start":
+        x_m, y_m = _curved_bridge_ground_approach_xy(
+            deck_x,
+            deck_y,
+            yaw,
+            heights_i16,
+            horizontal_scale=float(cfg.horizontal_scale),
+            vertical_scale=float(cfg.vertical_scale),
+            bridge_height_m=float(cfg.bridge_height),
+            ground_approach_m=float(ground_approach_m),
+            ground_offset_m=ground_offset_m,
+        )
+    elif endpoint == "end":
+        forward_m = (
+            float(ground_approach_m)
+            if tangent_offset_m is None
+            else float(tangent_offset_m)
+        )
+        if spawn_on_ground:
+            x_m, y_m = _curved_bridge_ground_exit_xy(
+                deck_x,
+                deck_y,
+                yaw,
+                heights_i16,
+                horizontal_scale=float(cfg.horizontal_scale),
+                vertical_scale=float(cfg.vertical_scale),
+                bridge_height_m=float(cfg.bridge_height),
+                ground_approach_m=forward_m,
+                ground_offset_m=ground_offset_m,
+            )
+        elif abs(forward_m) > 1.0e-6:
+            x_m, y_m = _curved_bridge_along_tangent_xy(
+                deck_x, deck_y, yaw, forward_m, ground_offset_m
+            )
+        else:
+            x_m, y_m = deck_x, deck_y
+    else:
+        x_m, y_m = deck_x, deck_y
+
+    elevation_min = int(np.min(heights_i16))
+    z_m = _height_at_corner_xy(
+        heights_i16,
+        horizontal_scale=float(cfg.horizontal_scale),
+        vertical_scale=float(cfg.vertical_scale),
+        elevation_min=elevation_min,
+        x_m=x_m,
+        y_m=y_m,
+    )
+    return np.array([[x_m, y_m, z_m, yaw]], dtype=np.float64)
+
+
+@generate_wall
+@height_field_to_mesh
+def perlin_chained_straight_bridge_terrain(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinChainedStraightBridgeTerrainCfg,
+) -> np.ndarray:
+    """Modular straight decks: each module is a 10 cm tall oriented box; gaps prevent overlap."""
+    ny = int(cfg.size[1] / cfg.horizontal_scale)
+    nx = int(cfg.size[0] / cfg.horizontal_scale)
+    hs = cfg.horizontal_scale
+    vs = cfg.vertical_scale
+
+    bridge_width_m = chained_straight_bridge_resolve_bridge_width_m(difficulty, cfg)
+    bridge_height_i = int(round(cfg.bridge_height / vs))
+    half_width_m = 0.5 * float(bridge_width_m)
+    segments = chained_straight_bridge_compute_segments(
+        difficulty,
+        cfg,
+        tile_size=(float(cfg.size[0]), float(cfg.size[1])),
+    )
+
+    hf_raw = np.zeros((ny, nx), dtype=np.float64)
+    _chained_straight_bridge_stamp_entrance_exit(
+        hf_raw,
+        segments,
+        horizontal_scale=hs,
+        bridge_width_m=bridge_width_m,
+        bridge_height_i=bridge_height_i,
+        entrance_approach_m=float(cfg.entrance_approach_m),
+        entrance_ramp_m=float(cfg.entrance_ramp_m),
+        exit_approach_m=float(cfg.exit_approach_m),
+    )
+    for start_x, start_y, heading, length_m in segments:
+        _rasterize_oriented_deck_box(
+            hf_raw,
+            start_x,
+            start_y,
+            heading,
+            length_m,
+            horizontal_scale=hs,
+            half_width_m=half_width_m,
+            bridge_height_i=bridge_height_i,
+        )
 
     if cfg.perlin_cfg is not None:
         perlin_cfg = cfg.perlin_cfg
@@ -2482,17 +2904,33 @@ def narrow_l_corner_turn_sign(cfg: hf_terrains_cfg.PerlinNarrowLCornerTerrainCfg
 def narrow_l_corner_resolve_railing_side(
     cfg: hf_terrains_cfg.PerlinNarrowLCornerTerrainCfg,
     rng: np.random.Generator,
-) -> Literal["inner", "outer", "left", "right"]:
+) -> Literal["inner", "outer", "left", "right", "none"]:
     """Pick guard-rail side for this sub-terrain tile."""
     side = str(getattr(cfg, "railing_side", "random"))
     if side == "random":
-        return "left" if float(rng.random()) < 0.5 else "right"
-    if side in ("inner", "outer", "left", "right"):
-        return cast(Literal["inner", "outer", "left", "right"], side)
+        pick = str(rng.choice(["left", "right", "none"]))
+        return cast(Literal["inner", "outer", "left", "right", "none"], pick)
+    if side in ("inner", "outer", "left", "right", "none"):
+        return cast(Literal["inner", "outer", "left", "right", "none"], side)
     raise ValueError(
-        "railing_side must be 'inner', 'outer', 'left', 'right', or 'random'. "
+        "railing_side must be 'inner', 'outer', 'left', 'right', 'none', or 'random'. "
         f"Got: {side!r}"
     )
+
+
+def narrow_l_corner_resolve_channel_width_m(
+    difficulty: float,
+    cfg: hf_terrains_cfg.PerlinNarrowLCornerTerrainCfg,
+) -> float:
+    if cfg.channel_width_range is not None:
+        lo, hi = cfg.channel_width_range
+        span = float(getattr(cfg, "channel_width_max_difficulty", 1.0))
+        if span <= 0.0:
+            t = 1.0
+        else:
+            t = min(float(difficulty) / span, 1.0)
+        return float(lo + t * (float(hi) - float(lo)))
+    return float(cfg.channel_width)
 
 
 def narrow_l_corner_resolve_turn_angle_deg(
@@ -2518,11 +2956,7 @@ def narrow_l_corner_compute_geometry(
     """Layout in sub-terrain corner frame (matches height-field centreline, no border)."""
     tile_x_m = float(tile_size[0] if tile_size is not None else cfg.size[0])
     tile_y_m = float(tile_size[1] if tile_size is not None else cfg.size[1])
-    if cfg.channel_width_range is not None:
-        lo, hi = cfg.channel_width_range
-        width_m = lo + difficulty * (hi - lo)
-    else:
-        width_m = float(cfg.channel_width)
+    width_m = narrow_l_corner_resolve_channel_width_m(difficulty, cfg)
     if cfg.deck_height_range is not None:
         lo_h, hi_h = cfg.deck_height_range
         deck_height_m = lo_h + difficulty * (hi_h - lo_h)

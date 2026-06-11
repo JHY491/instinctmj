@@ -12,6 +12,7 @@ from instinct_mj.terrains.height_field.hf_terrains import (
     narrow_l_corner_centerline_xy,
     narrow_l_corner_compute_geometry,
     narrow_l_corner_railing_xy_positions,
+    narrow_l_corner_resolve_channel_width_m,
     narrow_l_corner_resolve_railing_side,
     narrow_l_corner_resolve_layout,
     narrow_l_corner_resolve_turn_angle_deg,
@@ -242,14 +243,48 @@ def test_narrow_l_corner_robot_right_railing_stays_on_robot_right_side() -> None
             assert leg2[0] < x_corner
 
 
-def test_narrow_l_corner_random_railing_samples_robot_left_or_right() -> None:
+def test_narrow_l_corner_random_railing_samples_left_right_or_none() -> None:
     cfg = _make_cfg()
     cfg.railing_side = "random"
     sampled = {
         narrow_l_corner_resolve_railing_side(cfg, np.random.default_rng(seed))
-        for seed in range(32)
+        for seed in range(64)
     }
-    assert sampled == {"left", "right"}
+    assert sampled == {"left", "right", "none"}
+
+
+def test_narrow_l_corner_tile_grid_railing_spreads_left_right_none() -> None:
+    cfg = _make_cfg()
+    cfg.railing_side = "random"
+    sampled: set[str] = set()
+    for row in range(4):
+        for col in range(12):
+            tile_rng = np.random.default_rng((0 * 1_000_003 + row * 1_003 + col * 917) % (2**32))
+            sampled.add(narrow_l_corner_resolve_railing_side(cfg, tile_rng))
+    assert sampled == {"left", "right", "none"}
+
+
+def test_narrow_l_corner_channel_width_reaches_min_at_half_difficulty() -> None:
+    cfg = _make_cfg()
+    cfg.channel_width_range = (1.0, 0.6)
+    cfg.channel_width_max_difficulty = 0.5
+    assert abs(narrow_l_corner_resolve_channel_width_m(0.0, cfg) - 1.0) < 1.0e-6
+    assert abs(narrow_l_corner_resolve_channel_width_m(0.5, cfg) - 0.6) < 1.0e-6
+    assert abs(narrow_l_corner_resolve_channel_width_m(1.0, cfg) - 0.6) < 1.0e-6
+
+
+def test_narrow_l_corner_none_railing_places_no_bars() -> None:
+    cfg = _make_cfg()
+    cfg.railing_side = "none"
+    spec = mujoco.MjSpec()
+    spec.worldbody.add_body(name="terrain")
+    output = cfg.function(difficulty=1.0, spec=spec, rng=np.random.default_rng(0))
+    bar_count = sum(
+        1
+        for g in output.geometries
+        if g.geom is not None and g.geom.type == mujoco.mjtGeom.mjGEOM_CYLINDER
+    )
+    assert bar_count == 0
 
 
 @pytest.mark.xfail(

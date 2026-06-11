@@ -138,3 +138,13 @@ class AdamLiteHurdleParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 def adam_lite_hurdle_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """AMP runner for mixed hurdle parkour."""
     return AdamLiteHurdleParkourVisionAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteBridgeLCornerParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_chained_straight_bridge_parkour"
+
+
+def adam_lite_bridge_l_corner_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """AMP runner for curved bridge + narrow L-corner parkour."""
+    return AdamLiteBridgeLCornerParkourVisionAmpRunnerCfg()

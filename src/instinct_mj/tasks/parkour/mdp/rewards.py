@@ -506,6 +506,70 @@ def applied_torque_limits_by_ratio(
     return torch.sum(torch.square(out_of_limits_tensor), dim=-1)
 
 
+def on_deck(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    height_threshold: float = 0.10,
+    contact_force_threshold: float = 1.0,
+    command_name: str | None = None,
+    near_target_xy_dist: float | None = None,
+    spawn_patch_name: str | None = None,
+    near_spawn_xy_dist: float | None = None,
+) -> torch.Tensor:
+    """Reward feet on elevated deck (+1/contact foot), penalize ground (-1/contact foot).
+
+    With ``command_name``, within ``near_target_xy_dist`` of the pose target (defaults to
+    ``target_dis_threshold``) off-deck feet score 0 so ground goals are not penalized.
+    With ``spawn_patch_name``, the same exemption applies near the reset flat patch
+    (e.g. ``start``) within ``near_spawn_xy_dist``.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    robot_xy = asset.data.root_link_pos_w[:, :2]
+
+    foot_z = asset.data.body_link_pos_w[:, asset_cfg.body_ids, 2]
+    in_contact = (
+        torch.max(torch.linalg.vector_norm(contact_sensor.data.force_history, dim=-1), dim=2)[0]
+        > contact_force_threshold
+    ).float()
+
+    on_deck_mask = (foot_z > height_threshold).float()
+    per_foot = (on_deck_mask - (1.0 - on_deck_mask)) * in_contact
+    no_ground_penalty = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    if command_name is not None:
+        cmd_term = env.command_manager.get_term(command_name)
+        pos_w = getattr(cmd_term, "pos_command_w", None)
+        if pos_w is not None:
+            dist_thresh = near_target_xy_dist
+            if dist_thresh is None:
+                cmd_cfg = getattr(cmd_term, "cfg", None)
+                dist_thresh = getattr(cmd_cfg, "target_dis_threshold", None) if cmd_cfg is not None else None
+            if dist_thresh is not None:
+                target_dist = torch.norm(pos_w[:, :2] - robot_xy, dim=1)
+                no_ground_penalty = no_ground_penalty | (target_dist <= float(dist_thresh))
+
+    if spawn_patch_name is not None and near_spawn_xy_dist is not None:
+        terrain = env.scene.terrain
+        if terrain is not None and spawn_patch_name in terrain.flat_patches:
+            spawn_patches = terrain.flat_patches[spawn_patch_name]
+            levels = terrain.terrain_levels
+            types = terrain.terrain_types
+            spawn_xy = spawn_patches[levels, types, 0, :2]
+            spawn_dist = torch.norm(robot_xy - spawn_xy, dim=1)
+            no_ground_penalty = no_ground_penalty | (spawn_dist <= float(near_spawn_xy_dist))
+
+    if bool(no_ground_penalty.any()):
+        per_foot = torch.where(
+            no_ground_penalty.unsqueeze(-1),
+            on_deck_mask * in_contact,
+            per_foot,
+        )
+
+    return torch.sum(per_foot, dim=1)
+
+
 def undesired_contacts(
     env: ManagerBasedRlEnv,
     sensor_name: str,

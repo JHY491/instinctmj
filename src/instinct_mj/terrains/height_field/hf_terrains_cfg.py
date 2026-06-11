@@ -32,13 +32,13 @@ class FixedSequenceFlatPatchSamplingCfg(FlatPatchSamplingCfg):
     fixed_xy_points: tuple[tuple[float, float], ...] = ()
     reset_command_patch_index: int = 0
     centerline_endpoint: Literal["start", "end"] | None = None
-    """When set on ``PerlinCurvedBridgeTerrainCfg``, patch (x, y, z, yaw) is taken from the
-    bridge centerline tangent instead of ``fixed_xy_points``."""
+    """When set on bridge terrain cfgs, patch (x, y, z, yaw) is taken from the path centerline
+    tangent instead of ``fixed_xy_points``."""
     centerline_arc_offset_m: float = 0.0
     """Shift spawn along the centerline by this arc length (m) from start/end."""
     centerline_spawn_on_ground: bool = False
-    """On ``PerlinCurvedBridgeTerrainCfg``: ``start`` -> ground before the entrance;
-    ``end`` -> ground ahead of the exit (off the bridge). L-corner uses this for ``start`` only."""
+    """On bridge terrains: ``start`` -> ground before the entrance; ``end`` -> ground ahead of the
+    exit (off the deck)."""
     centerline_ground_approach_m: float = 0.75
     """Meters along the centerline tangent from the deck point (backward at start, forward at end)."""
     centerline_tangent_offset_m: float | None = None
@@ -1283,6 +1283,118 @@ class PerlinCurvedBridgeTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
 
 
 @dataclass(kw_only=True)
+class PerlinChainedStraightBridgeTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
+    """Chained straight bridge modules (串联直桥).
+
+    Each module is a uniform ``bridge_height`` (default 0.1 m) oriented rectangular
+    deck. Ground gaps and joint turns keep boxes disjoint—no overlapping geometry.
+    """
+
+    flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+
+    bridge_width: float = 0.5
+    bridge_width_range: tuple[float, float] | None = None
+    bridge_height: float = 0.1
+
+    num_segments_range: tuple[int, int] = (2, 4)
+    """Inclusive (easy, hard) module count, interpolated by difficulty."""
+
+    segment_length_m: float = 2.5
+    """Deck length per module when ``segment_length_range`` is None."""
+
+    segment_length_range: tuple[float, float] | None = None
+
+    segment_gap_m: float = 0.2
+    """Ground gap (m) between consecutive modules along the exit tangent."""
+
+    turn_angle_range: tuple[float, float] = (0.0, 0.0)
+    """Heading change (deg) after each module when ``segment_turns_deg`` is None."""
+
+    segment_turns_deg: tuple[float, ...] | None = None
+    """Explicit per-joint turn angles (deg) after each module; length = num_segments - 1.
+
+    Positive turns left (CCW). Use alternating signs (e.g. ``(25, -25)``) for zigzag swings."""
+
+    entrance_approach_m: float = 0.0
+    """Flat ground strip (m) before the first deck; 0 disables extra entrance geometry."""
+
+    entrance_ramp_m: float = 0.0
+    """Ramp length (m) before the first deck; 0 means no entrance ramp."""
+
+    exit_approach_m: float = 0.0
+    """Flat ground strip (m) after the last deck; 0 disables extra exit geometry."""
+
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+
+    def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
+        return _RAW_PERLIN_CHAINED_STRAIGHT_BRIDGE_TERRAIN_FN(difficulty, cfg_for_gen)
+
+    def function(
+        self,
+        difficulty: float,
+        spec: mujoco.MjSpec,
+        rng: np.random.Generator,
+    ) -> TerrainOutput:
+        from . import hf_terrains as hf_terrains_mod
+
+        output = super().function(difficulty, spec, rng)
+        if self.flat_patch_sampling is None or output.flat_patches is None:
+            return output
+
+        width_pixels = int(self.size[1] / self.horizontal_scale)
+        length_pixels = int(self.size[0] / self.horizontal_scale)
+        border_pixels = int(self.border_width / self.horizontal_scale)
+        sub_terrain_size = [
+            (length_pixels - 2 * border_pixels) * self.horizontal_scale,
+            (width_pixels - 2 * border_pixels) * self.horizontal_scale,
+        ]
+        cfg_sub = copy.deepcopy(self)
+        cfg_sub.size = (float(sub_terrain_size[0]), float(sub_terrain_size[1]))
+        generated_i16 = np.asarray(
+            self._generate_height_field(difficulty, cfg_sub),
+            dtype=np.int16,
+        )
+        heights_i16 = np.zeros((width_pixels, length_pixels), dtype=np.int16)
+        if border_pixels > 0:
+            heights_i16[
+                border_pixels:-border_pixels,
+                border_pixels:-border_pixels,
+            ] = generated_i16
+        else:
+            heights_i16[:, :] = generated_i16
+
+        elevation_min = int(np.min(heights_i16))
+        z_offset = float(elevation_min) * float(self.vertical_scale)
+        heights_phys = (heights_i16.astype(np.float64) - float(elevation_min)) * float(self.vertical_scale)
+
+        patched: dict[str, np.ndarray] = dict(output.flat_patches or {})
+        for patch_name, patch_cfg in self.flat_patch_sampling.items():
+            endpoint = getattr(patch_cfg, "centerline_endpoint", None)
+            if endpoint not in ("start", "end"):
+                continue
+            patched[patch_name] = hf_terrains_mod.chained_straight_bridge_centerline_patch(
+                difficulty=float(difficulty),
+                cfg=cfg_sub,
+                heights_i16=heights_i16,
+                heights_phys=heights_phys,
+                z_offset=z_offset,
+                endpoint=cast(Literal["start", "end"], endpoint),
+                terrain_size=(float(sub_terrain_size[0]), float(sub_terrain_size[1])),
+                border_xy=(
+                    float(border_pixels) * float(self.horizontal_scale),
+                    float(border_pixels) * float(self.horizontal_scale),
+                ),
+                arc_offset_m=float(getattr(patch_cfg, "centerline_arc_offset_m", 0.0)),
+                spawn_on_ground=bool(getattr(patch_cfg, "centerline_spawn_on_ground", False)),
+                ground_approach_m=float(getattr(patch_cfg, "centerline_ground_approach_m", 0.75)),
+                ground_offset_m=tuple(getattr(patch_cfg, "centerline_ground_offset_m", (0.0, 0.0))),
+                tangent_offset_m=getattr(patch_cfg, "centerline_tangent_offset_m", None),
+            )
+        output.flat_patches = patched
+        return output
+
+
+@dataclass(kw_only=True)
 class PerlinContinuousHurdleTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
     """Continuous hurdle (连续跨栏) terrain.
 
@@ -1402,7 +1514,10 @@ class PerlinNarrowLCornerTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
 
     channel_width_range: tuple[float, float] | None = None
     """Optional (easy, hard) deck width (meters), interpolated by difficulty.
-    E.g. (1.0, 0.6): easy=1.0m at difficulty=0, hard=0.6m at difficulty=1."""
+    E.g. (1.0, 0.5): 1.0m at difficulty=0, 0.5m when difficulty reaches ``channel_width_max_difficulty``."""
+
+    channel_width_max_difficulty: float = 1.0
+    """Difficulty at which ``channel_width_range`` reaches its hard (hi) value; values above clamp."""
 
     deck_height: float = 0.3
     """Elevated channel floor height (meters) when ``deck_height_range`` is None."""
@@ -1419,8 +1534,8 @@ class PerlinNarrowLCornerTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
     railing_bar_radius: float = 0.02
     """Radius of each vertical guard bar (meters)."""
 
-    railing_side: Literal["inner", "outer", "left", "right", "random"] = "random"
-    """Guard bar side. ``left``/``right`` stay on the robot's body side along the path."""
+    railing_side: Literal["inner", "outer", "left", "right", "none", "random"] = "random"
+    """Guard bar side. ``random`` picks left, right, or none. ``none`` omits guard bars."""
 
     outer_curb_height: float = 0.15
     """Low lip height on outer deck edges (meters)."""
@@ -1469,15 +1584,23 @@ class PerlinNarrowLCornerTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
         bar_half_h = self.railing_height * 0.5
         bar_z = deck_h + bar_half_h
         rail_side = hf_terrains_mod.narrow_l_corner_resolve_railing_side(self, rng)
-        rail_xy = hf_terrains_mod.narrow_l_corner_railing_xy_positions(
-            difficulty,
-            self,
-            rail_side,
-            tile_size=sub_size,
-            border_xy=(bw, bw),
-        )
+        rail_xy: list[tuple[float, float]] = []
+        if rail_side != "none":
+            rail_xy = hf_terrains_mod.narrow_l_corner_railing_xy_positions(
+                difficulty,
+                self,
+                rail_side,
+                tile_size=sub_size,
+                border_xy=(bw, bw),
+            )
 
         body = spec.body("terrain")
+        bar_rgba = {
+            "left": (0.92, 0.35, 0.08, 0.95),
+            "right": (0.12, 0.45, 0.95, 0.95),
+            "inner": (0.92, 0.35, 0.08, 0.95),
+            "outer": (0.12, 0.45, 0.95, 0.95),
+        }.get(rail_side, (0.75, 0.75, 0.75, 0.95))
         bar_geoms: list[TerrainGeometry] = []
         for x_m, y_m in rail_xy:
             geom = body.add_geom(
@@ -1485,6 +1608,9 @@ class PerlinNarrowLCornerTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
                 size=[bar_r, bar_half_h],
                 pos=[x_m, y_m, bar_z],
             )
+            geom.contype = 1
+            geom.conaffinity = 1
+            geom.rgba[:] = bar_rgba
             bar_geoms.append(TerrainGeometry(geom=geom))
         output.geometries.extend(bar_geoms)
 
@@ -1636,6 +1762,9 @@ _RAW_PERLIN_CONTINUOUS_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terra
 _RAW_PERLIN_CROSS_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_slope_terrain)
 _RAW_PERLIN_SYMMETRICAL_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_symmetrical_slope_terrain)
 _RAW_PERLIN_CURVED_BRIDGE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_curved_bridge_terrain)
+_RAW_PERLIN_CHAINED_STRAIGHT_BRIDGE_TERRAIN_FN = _unwrap_height_field_function(
+    hf_terrains.perlin_chained_straight_bridge_terrain
+)
 _RAW_PERLIN_CONTINUOUS_HURDLE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_continuous_hurdle_terrain)
 _RAW_PERLIN_NARROW_L_CORNER_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_narrow_l_corner_terrain)
 _RAW_PERLIN_SLALOM_POLE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_slalom_pole_terrain)
