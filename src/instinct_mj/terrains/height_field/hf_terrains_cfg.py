@@ -114,7 +114,10 @@ def terrain_column_fixed_sequence_reset_patch_index(terrain_generator_cfg: objec
             out.append(0)
             continue
         idx = int(tgt.reset_command_patch_index)
-        n = len(tgt.fixed_xy_points)
+        if getattr(tgt, "centerline_endpoint", None) in ("start", "end"):
+            n = int(tgt.num_patches)
+        else:
+            n = len(tgt.fixed_xy_points)
         if idx < 0:
             idx = max(0, n + idx)
         if n > 0:
@@ -1277,6 +1280,7 @@ class PerlinCurvedBridgeTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
                 ground_approach_m=float(getattr(patch_cfg, "centerline_ground_approach_m", 0.75)),
                 ground_offset_m=tuple(getattr(patch_cfg, "centerline_ground_offset_m", (0.0, 0.0))),
                 tangent_offset_m=getattr(patch_cfg, "centerline_tangent_offset_m", None),
+                num_patches=int(getattr(patch_cfg, "num_patches", 1)),
             )
         output.flat_patches = patched
         return output
@@ -1389,6 +1393,7 @@ class PerlinChainedStraightBridgeTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixi
                 ground_approach_m=float(getattr(patch_cfg, "centerline_ground_approach_m", 0.75)),
                 ground_offset_m=tuple(getattr(patch_cfg, "centerline_ground_offset_m", (0.0, 0.0))),
                 tangent_offset_m=getattr(patch_cfg, "centerline_tangent_offset_m", None),
+                num_patches=int(getattr(patch_cfg, "num_patches", 1)),
             )
         output.flat_patches = patched
         return output
@@ -1661,6 +1666,7 @@ class PerlinNarrowLCornerTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
                     ground_approach_m=float(getattr(patch_cfg, "centerline_ground_approach_m", 0.75)),
                     ground_offset_m=tuple(getattr(patch_cfg, "centerline_ground_offset_m", (0.0, 0.0))),
                     tangent_offset_m=getattr(patch_cfg, "centerline_tangent_offset_m", None),
+                    num_patches=int(getattr(patch_cfg, "num_patches", 1)),
                 )
             output.flat_patches = patched
         return output

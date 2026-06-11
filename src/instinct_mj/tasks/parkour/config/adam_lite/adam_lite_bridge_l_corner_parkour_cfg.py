@@ -318,9 +318,10 @@ def instinct_adam_lite_bridge_l_corner_parkour_env_cfg(
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
             ang_vel_threshold=0.0,
-            target_dis_threshold=0.4,
+            target_dis_threshold=0.25,
             flat_patch_random_index=False,
             flat_patch_advance_on_arrival=True,
+            flat_patch_arrival_xy_dist=0.35,
             show_flat_patch_candidates=True,
         ),
     }
@@ -555,11 +556,11 @@ def instinct_adam_lite_bridge_l_corner_parkour_env_cfg(
         ),
         "ang_vel_z_excess_when_no_yaw_cmd": RewardTermCfg(
             func=parkour_mdp.ang_vel_z_excess_when_no_yaw_cmd,
-            weight=0.0,
+            weight=-0.5,
             params={
                 "command_name": "base_velocity",
                 "cmd_epsilon": 0.01,
-                "ang_vel_tolerance": 0.15,
+                "ang_vel_tolerance": 1.0,
             },
         ),
         "heading_error": RewardTermCfg(
@@ -674,6 +675,16 @@ def instinct_adam_lite_bridge_l_corner_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
+            },
+        ),
+        "target_heading_alignment": RewardTermCfg(
+            func=parkour_mdp.target_heading_alignment,
+            weight=0.75,
+            params={
+                "command_name": "base_velocity",
+                "patch_name": "target",
+                "cmd_threshold": 0.05,
+                "std": 0.6,
             },
         ),
         "feet_at_plane": RewardTermCfg(

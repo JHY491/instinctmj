@@ -2171,6 +2171,31 @@ def curved_bridge_centerline_yaw(cx: np.ndarray, cy: np.ndarray, index: int) -> 
     return float(np.arctan2(dy, dx))
 
 
+def _centerline_arc_cumulative(cx: np.ndarray, cy: np.ndarray) -> np.ndarray:
+    seg_len = np.sqrt(np.diff(cx) ** 2 + np.diff(cy) ** 2)
+    return np.concatenate([[0.0], np.cumsum(seg_len)])
+
+
+def _centerline_pose_at_arc(
+    cx: np.ndarray,
+    cy: np.ndarray,
+    arc_cum: np.ndarray,
+    arc_m: float,
+) -> tuple[float, float, float]:
+    arc_m = float(np.clip(arc_m, 0.0, float(arc_cum[-1])))
+    seg_i = int(np.searchsorted(arc_cum, arc_m, side="right") - 1)
+    seg_i = int(np.clip(seg_i, 0, len(cx) - 2))
+    seg_len = float(arc_cum[seg_i + 1] - arc_cum[seg_i])
+    if seg_len < 1.0e-9:
+        t = 0.0
+    else:
+        t = (arc_m - float(arc_cum[seg_i])) / seg_len
+    x_m = float(cx[seg_i] + t * (cx[seg_i + 1] - cx[seg_i]))
+    y_m = float(cy[seg_i] + t * (cy[seg_i + 1] - cy[seg_i]))
+    yaw = float(np.arctan2(float(cy[seg_i + 1] - cy[seg_i]), float(cx[seg_i + 1] - cx[seg_i])))
+    return x_m, y_m, yaw
+
+
 def _height_at_corner_xy(
     heights_i16: np.ndarray,
     *,
@@ -2304,6 +2329,126 @@ def _curved_bridge_ground_exit_xy(
     return deck_x + forward * tangent_x + extra_dx, deck_y + forward * tangent_y + extra_dy
 
 
+def _centerline_patch_sequence(
+    cx: np.ndarray,
+    cy: np.ndarray,
+    *,
+    heights_i16: np.ndarray,
+    horizontal_scale: float,
+    vertical_scale: float,
+    bridge_height_m: float,
+    elevation_min: int,
+    border_xy: tuple[float, float],
+    endpoint: str,
+    arc_offset_m: float,
+    spawn_on_ground: bool,
+    ground_approach_m: float,
+    ground_offset_m: tuple[float, float],
+    tangent_offset_m: float | None,
+    num_patches: int,
+) -> np.ndarray:
+    """Return centerline patches as (N, 4), using a path sequence for multi-target exits."""
+    num_patches = max(1, int(num_patches))
+    arc_cum = _centerline_arc_cumulative(cx, cy)
+    bx, by = float(border_xy[0]), float(border_xy[1])
+
+    if endpoint == "end" and num_patches > 1:
+        deck_count = num_patches - 1 if spawn_on_ground else num_patches
+        start_arc = float(np.clip(float(arc_offset_m), 0.0, float(arc_cum[-1])))
+        arcs = np.linspace(start_arc, float(arc_cum[-1]), deck_count, dtype=np.float64)
+        rows: list[list[float]] = []
+        for arc_m in arcs:
+            x_local, y_local, yaw = _centerline_pose_at_arc(cx, cy, arc_cum, float(arc_m))
+            x_m = x_local + bx
+            y_m = y_local + by
+            z_m = _height_at_corner_xy(
+                heights_i16,
+                horizontal_scale=horizontal_scale,
+                vertical_scale=vertical_scale,
+                elevation_min=elevation_min,
+                x_m=x_m,
+                y_m=y_m,
+            )
+            rows.append([x_m, y_m, z_m, yaw])
+
+        if spawn_on_ground:
+            x_local, y_local, yaw = _centerline_pose_at_arc(cx, cy, arc_cum, float(arc_cum[-1]))
+            deck_x = x_local + bx
+            deck_y = y_local + by
+            forward_m = float(ground_approach_m) if tangent_offset_m is None else float(tangent_offset_m)
+            x_m, y_m = _curved_bridge_ground_exit_xy(
+                deck_x,
+                deck_y,
+                yaw,
+                heights_i16,
+                horizontal_scale=horizontal_scale,
+                vertical_scale=vertical_scale,
+                bridge_height_m=bridge_height_m,
+                ground_approach_m=forward_m,
+                ground_offset_m=ground_offset_m,
+            )
+            z_m = _height_at_corner_xy(
+                heights_i16,
+                horizontal_scale=horizontal_scale,
+                vertical_scale=vertical_scale,
+                elevation_min=elevation_min,
+                x_m=x_m,
+                y_m=y_m,
+            )
+            rows.append([x_m, y_m, z_m, yaw])
+        return np.asarray(rows, dtype=np.float64)
+
+    from_start = endpoint == "start"
+    deck_index = _centerline_index_at_arc_offset(cx, cy, float(arc_offset_m), from_start=from_start)
+    deck_x = float(cx[deck_index]) + bx
+    deck_y = float(cy[deck_index]) + by
+    yaw = curved_bridge_centerline_yaw(cx, cy, deck_index)
+    if spawn_on_ground and endpoint == "start":
+        x_m, y_m = _curved_bridge_ground_approach_xy(
+            deck_x,
+            deck_y,
+            yaw,
+            heights_i16,
+            horizontal_scale=horizontal_scale,
+            vertical_scale=vertical_scale,
+            bridge_height_m=bridge_height_m,
+            ground_approach_m=float(ground_approach_m),
+            ground_offset_m=ground_offset_m,
+        )
+    elif endpoint == "end":
+        forward_m = float(ground_approach_m) if tangent_offset_m is None else float(tangent_offset_m)
+        if spawn_on_ground:
+            x_m, y_m = _curved_bridge_ground_exit_xy(
+                deck_x,
+                deck_y,
+                yaw,
+                heights_i16,
+                horizontal_scale=horizontal_scale,
+                vertical_scale=vertical_scale,
+                bridge_height_m=bridge_height_m,
+                ground_approach_m=forward_m,
+                ground_offset_m=ground_offset_m,
+            )
+        elif abs(forward_m) > 1.0e-6:
+            x_m, y_m = _curved_bridge_along_tangent_xy(
+                deck_x, deck_y, yaw, forward_m, ground_offset_m
+            )
+        else:
+            x_m, y_m = deck_x, deck_y
+    else:
+        x_m, y_m = deck_x, deck_y
+
+    z_m = _height_at_corner_xy(
+        heights_i16,
+        horizontal_scale=horizontal_scale,
+        vertical_scale=vertical_scale,
+        elevation_min=elevation_min,
+        x_m=x_m,
+        y_m=y_m,
+    )
+    return np.array([[x_m, y_m, z_m, yaw]], dtype=np.float64)
+
+
 def curved_bridge_centerline_patch(
     difficulty: float,
     cfg: hf_terrains_cfg.PerlinCurvedBridgeTerrainCfg,
@@ -2319,67 +2464,30 @@ def curved_bridge_centerline_patch(
     ground_approach_m: float = 0.75,
     ground_offset_m: tuple[float, float] = (0.0, 0.0),
     tangent_offset_m: float | None = None,
+    num_patches: int = 1,
 ) -> np.ndarray:
     """Flat patch row(s) as (N, 4): x, y, z, yaw in full-tile corner-frame meters."""
     del heights_phys, z_offset
     sub_size = terrain_size if terrain_size is not None else (float(cfg.size[0]), float(cfg.size[1]))
     cx, cy = curved_bridge_build_centerline_xy(difficulty, cfg, tile_size=sub_size)
-    from_start = endpoint == "start"
-    deck_index = _centerline_index_at_arc_offset(cx, cy, float(arc_offset_m), from_start=from_start)
-    bx, by = float(border_xy[0]), float(border_xy[1])
-    deck_x = float(cx[deck_index]) + bx
-    deck_y = float(cy[deck_index]) + by
-
-    yaw = curved_bridge_centerline_yaw(cx, cy, deck_index)
-    if spawn_on_ground and endpoint == "start":
-        x_m, y_m = _curved_bridge_ground_approach_xy(
-            deck_x,
-            deck_y,
-            yaw,
-            heights_i16,
-            horizontal_scale=float(cfg.horizontal_scale),
-            vertical_scale=float(cfg.vertical_scale),
-            bridge_height_m=float(cfg.bridge_height),
-            ground_approach_m=float(ground_approach_m),
-            ground_offset_m=ground_offset_m,
-        )
-    elif endpoint == "end":
-        forward_m = (
-            float(ground_approach_m)
-            if tangent_offset_m is None
-            else float(tangent_offset_m)
-        )
-        if spawn_on_ground:
-            x_m, y_m = _curved_bridge_ground_exit_xy(
-                deck_x,
-                deck_y,
-                yaw,
-                heights_i16,
-                horizontal_scale=float(cfg.horizontal_scale),
-                vertical_scale=float(cfg.vertical_scale),
-                bridge_height_m=float(cfg.bridge_height),
-                ground_approach_m=forward_m,
-                ground_offset_m=ground_offset_m,
-            )
-        elif abs(forward_m) > 1.0e-6:
-            x_m, y_m = _curved_bridge_along_tangent_xy(
-                deck_x, deck_y, yaw, forward_m, ground_offset_m
-            )
-        else:
-            x_m, y_m = deck_x, deck_y
-    else:
-        x_m, y_m = deck_x, deck_y
-
     elevation_min = int(np.min(heights_i16))
-    z_m = _height_at_corner_xy(
-        heights_i16,
+    return _centerline_patch_sequence(
+        cx,
+        cy,
+        heights_i16=heights_i16,
         horizontal_scale=float(cfg.horizontal_scale),
         vertical_scale=float(cfg.vertical_scale),
+        bridge_height_m=float(cfg.bridge_height),
         elevation_min=elevation_min,
-        x_m=x_m,
-        y_m=y_m,
+        border_xy=border_xy,
+        endpoint=endpoint,
+        arc_offset_m=arc_offset_m,
+        spawn_on_ground=spawn_on_ground,
+        ground_approach_m=ground_approach_m,
+        ground_offset_m=ground_offset_m,
+        tangent_offset_m=tangent_offset_m,
+        num_patches=num_patches,
     )
-    return np.array([[x_m, y_m, z_m, yaw]], dtype=np.float64)
 
 
 @generate_wall
@@ -2729,66 +2837,29 @@ def chained_straight_bridge_centerline_patch(
     ground_approach_m: float = 0.75,
     ground_offset_m: tuple[float, float] = (0.0, 0.0),
     tangent_offset_m: float | None = None,
+    num_patches: int = 1,
 ) -> np.ndarray:
     del heights_phys, z_offset
     sub_size = terrain_size if terrain_size is not None else (float(cfg.size[0]), float(cfg.size[1]))
     cx, cy = chained_straight_bridge_build_path_xy(difficulty, cfg, tile_size=sub_size)
-    from_start = endpoint == "start"
-    deck_index = _centerline_index_at_arc_offset(cx, cy, float(arc_offset_m), from_start=from_start)
-    bx, by = float(border_xy[0]), float(border_xy[1])
-    deck_x = float(cx[deck_index]) + bx
-    deck_y = float(cy[deck_index]) + by
-
-    yaw = curved_bridge_centerline_yaw(cx, cy, deck_index)
-    if spawn_on_ground and endpoint == "start":
-        x_m, y_m = _curved_bridge_ground_approach_xy(
-            deck_x,
-            deck_y,
-            yaw,
-            heights_i16,
-            horizontal_scale=float(cfg.horizontal_scale),
-            vertical_scale=float(cfg.vertical_scale),
-            bridge_height_m=float(cfg.bridge_height),
-            ground_approach_m=float(ground_approach_m),
-            ground_offset_m=ground_offset_m,
-        )
-    elif endpoint == "end":
-        forward_m = (
-            float(ground_approach_m)
-            if tangent_offset_m is None
-            else float(tangent_offset_m)
-        )
-        if spawn_on_ground:
-            x_m, y_m = _curved_bridge_ground_exit_xy(
-                deck_x,
-                deck_y,
-                yaw,
-                heights_i16,
-                horizontal_scale=float(cfg.horizontal_scale),
-                vertical_scale=float(cfg.vertical_scale),
-                bridge_height_m=float(cfg.bridge_height),
-                ground_approach_m=forward_m,
-                ground_offset_m=ground_offset_m,
-            )
-        elif abs(forward_m) > 1.0e-6:
-            x_m, y_m = _curved_bridge_along_tangent_xy(
-                deck_x, deck_y, yaw, forward_m, ground_offset_m
-            )
-        else:
-            x_m, y_m = deck_x, deck_y
-    else:
-        x_m, y_m = deck_x, deck_y
-
     elevation_min = int(np.min(heights_i16))
-    z_m = _height_at_corner_xy(
-        heights_i16,
+    return _centerline_patch_sequence(
+        cx,
+        cy,
+        heights_i16=heights_i16,
         horizontal_scale=float(cfg.horizontal_scale),
         vertical_scale=float(cfg.vertical_scale),
+        bridge_height_m=float(cfg.bridge_height),
         elevation_min=elevation_min,
-        x_m=x_m,
-        y_m=y_m,
+        border_xy=border_xy,
+        endpoint=endpoint,
+        arc_offset_m=arc_offset_m,
+        spawn_on_ground=spawn_on_ground,
+        ground_approach_m=ground_approach_m,
+        ground_offset_m=ground_offset_m,
+        tangent_offset_m=tangent_offset_m,
+        num_patches=num_patches,
     )
-    return np.array([[x_m, y_m, z_m, yaw]], dtype=np.float64)
 
 
 @generate_wall
@@ -3221,64 +3292,31 @@ def narrow_l_corner_centerline_patch(
     ground_approach_m: float = 0.75,
     ground_offset_m: tuple[float, float] = (0.0, 0.0),
     tangent_offset_m: float | None = None,
+    num_patches: int = 1,
 ) -> np.ndarray:
     """Flat patch as (N, 4): x, y, z, yaw in full-tile corner-frame meters."""
     del heights_phys, z_offset, terrain_size
     layout = narrow_l_corner_resolve_layout(difficulty, cfg)
     cx, cy = narrow_l_corner_centerline_xy(layout)
-    from_start = endpoint == "start"
-    deck_index = _centerline_index_at_arc_offset(cx, cy, float(arc_offset_m), from_start=from_start)
-    bx, by = float(border_xy[0]), float(border_xy[1])
-    deck_x = float(cx[deck_index]) + bx
-    deck_y = float(cy[deck_index]) + by
-    yaw = curved_bridge_centerline_yaw(cx, cy, deck_index)
     deck_height_m = float(layout["deck_height_m"])
-    if spawn_on_ground and endpoint == "start":
-        x_m, y_m = _curved_bridge_ground_approach_xy(
-            deck_x,
-            deck_y,
-            yaw,
-            heights_i16,
-            horizontal_scale=float(cfg.horizontal_scale),
-            vertical_scale=float(cfg.vertical_scale),
-            bridge_height_m=deck_height_m,
-            ground_approach_m=float(ground_approach_m),
-            ground_offset_m=ground_offset_m,
-        )
-    elif endpoint == "end":
-        forward_m = (
-            float(ground_approach_m)
-            if tangent_offset_m is None
-            else float(tangent_offset_m)
-        )
-        if spawn_on_ground:
-            x_m, y_m = _curved_bridge_ground_exit_xy(
-                deck_x,
-                deck_y,
-                yaw,
-                heights_i16,
-                horizontal_scale=float(cfg.horizontal_scale),
-                vertical_scale=float(cfg.vertical_scale),
-                bridge_height_m=deck_height_m,
-                ground_approach_m=forward_m,
-                ground_offset_m=ground_offset_m,
-            )
-        else:
-            x_m, y_m = _curved_bridge_along_tangent_xy(
-                deck_x, deck_y, yaw, forward_m, ground_offset_m
-            )
-    else:
-        x_m, y_m = deck_x, deck_y
     elevation_min = int(np.min(heights_i16))
-    z_m = _height_at_corner_xy(
-        heights_i16,
+    return _centerline_patch_sequence(
+        cx,
+        cy,
+        heights_i16=heights_i16,
         horizontal_scale=float(cfg.horizontal_scale),
         vertical_scale=float(cfg.vertical_scale),
+        bridge_height_m=deck_height_m,
         elevation_min=elevation_min,
-        x_m=x_m,
-        y_m=y_m,
+        border_xy=border_xy,
+        endpoint=endpoint,
+        arc_offset_m=arc_offset_m,
+        spawn_on_ground=spawn_on_ground,
+        ground_approach_m=ground_approach_m,
+        ground_offset_m=ground_offset_m,
+        tangent_offset_m=tangent_offset_m,
+        num_patches=num_patches,
     )
-    return np.array([[x_m, y_m, z_m, yaw]], dtype=np.float64)
 
 
 @generate_wall

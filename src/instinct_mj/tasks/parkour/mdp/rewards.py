@@ -400,6 +400,40 @@ def feet_heading_alignment(
     return torch.mean(alignment_reward, dim=1) * is_active.float()
 
 
+def target_heading_alignment(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    patch_name: str = "target",
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    cmd_threshold: float = 0.05,
+    std: float = 0.6,
+) -> torch.Tensor:
+    """Reward base heading alignment with the current flat-patch path tangent."""
+    asset: Entity = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    command_norm = torch.linalg.vector_norm(command[:, :2], dim=-1)
+    is_active = command_norm > cmd_threshold
+
+    command_term = env.command_manager.get_term(command_name)
+    patch_idx = getattr(command_term, "_flat_patch_idx", None)
+    terrain = env.scene["terrain"]
+    headings_by_name = getattr(terrain, "flat_patch_headings", None)
+    if patch_idx is None or not isinstance(headings_by_name, dict) or patch_name not in headings_by_name:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    headings = headings_by_name[patch_name]
+    levels = terrain.terrain_levels
+    cols = terrain.terrain_types
+    patch_idx = torch.clamp(patch_idx, min=0, max=headings.shape[2] - 1)
+    target_yaw = headings[levels, cols, patch_idx]
+
+    yaw_error = torch.atan2(
+        torch.sin(target_yaw - asset.data.heading_w),
+        torch.cos(target_yaw - asset.data.heading_w),
+    )
+    return torch.exp(-torch.square(yaw_error) / std**2) * is_active.float()
+
+
 
 
 def volume_points_penetration(

@@ -1324,6 +1324,11 @@ for _k in CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains:
 _mix_curved_bridge = CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains["curved_bridge"]
 _mix_curved_bridge.straight_at_zero_difficulty = True
 _mix_curved_bridge.straight_max_difficulty = 1.0 / float(CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.num_rows)
+for _bridge_name in ("chained_straight_bridge_4", "curved_bridge", "narrow_l_corner", "narrow_l_corner_right"):
+    _target_cfg = CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG.sub_terrains[_bridge_name].flat_patch_sampling["target"]
+    _target_cfg.num_patches = 7
+    _target_cfg.centerline_tangent_offset_m = 1.0
+    _target_cfg.centerline_ground_approach_m = 1.0
 CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY = _play_cfg(CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG)
 CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY.size = (12.0, 10.0)
 _play_mix_curved_bridge = CHAINED_STRAIGHT_BRIDGE_TERRAINS_CFG_PLAY.sub_terrains["curved_bridge"]
