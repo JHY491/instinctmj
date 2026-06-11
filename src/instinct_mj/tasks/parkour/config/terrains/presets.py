@@ -1453,6 +1453,7 @@ HURDLE_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             wall_prob=[0.0, 0.0, 0.0, 0.0],
             wall_height=0.0,
             wall_thickness=0.05,
+            virtual_obstacle_keys=("hurdle_edges",),
             flat_patch_sampling={
                 "target": FlatPatchSamplingCfg(
                     num_patches=50,

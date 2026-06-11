@@ -136,7 +136,7 @@ class AdamLiteHurdleParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 
 
 def adam_lite_hurdle_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """AMP runner for mixed hurdle parkour."""
+    """AMP runner for continuous hurdle parkour."""
     return AdamLiteHurdleParkourVisionAmpRunnerCfg()
 
 

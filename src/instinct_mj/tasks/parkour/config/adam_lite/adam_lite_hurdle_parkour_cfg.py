@@ -14,7 +14,6 @@ import instinct_mj.tasks.parkour.mdp.events as parkour_events
 
 import mujoco
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers import (
     CurriculumTermCfg,
     EventTermCfg,
@@ -166,7 +165,7 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
         max_init_terrain_level=5,
         virtual_obstacle_source="mesh",
         virtual_obstacle_hfield_height_threshold=None,
-        collision_debug_vis=True,
+        collision_debug_vis=False,
         collision_debug_rgba=(0.62, 0.2, 0.9, 0.35),
         virtual_obstacles={
             "hurdle_edges": hurdle_edge_obstacle_cfg,
@@ -633,16 +632,6 @@ def instinct_adam_lite_hurdle_parkour_env_cfg(
                 "threshold": 1.0,
             },
         ),
-        # "joint_deviation_hip": RewardTermCfg(
-        #     func=parkour_mdp.joint_deviation_square,
-        #     weight=-0.5,
-        #     params={
-        #         "asset_cfg": SceneEntityCfg(
-        #             "robot",
-        #             joint_names=(".*_hip_yaw_joint", ".*_hip_roll_joint"),
-        #         )
-        #     },
-        # ),
         "joint_deviation_ankle": RewardTermCfg(
             func=parkour_mdp.joint_deviation_square,
             weight=-0.5,

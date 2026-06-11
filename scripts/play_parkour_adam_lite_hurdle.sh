@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-Lite-Hurdle-Play-v0：三斜坡 play / 导出 ONNX。
+# Instinct-Parkour-Adam-Lite-Hurdle-Play-v0：连续跨栏 play / 导出 ONNX。
 #
 # 用法:
 #   ./scripts/play_parkour_adam_lite_hurdle.sh --load-run <run>

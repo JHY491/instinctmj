@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Instinct-Parkour-Adam-Lite-Hurdle-v0 训练脚本
-# 混合跨栏（stand / walk / hurdle）+ AMP + 深度视觉。
+# 连续跨栏 + AMP + 深度视觉。
 #
 # 用法:
 #   ./scripts/train_parkour_adam_lite_hurdle.sh

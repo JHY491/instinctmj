@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from instinct_mj.tasks.parkour.config.terrains.presets import MIXED_HURDLE_TERRAINS_CFG
+from instinct_mj.tasks.parkour.config.terrains.presets import HURDLE_TERRAINS_CFG, MIXED_HURDLE_TERRAINS_CFG
 from instinct_mj.terrains.height_field.hf_terrains_cfg import (
     _subterrain_reset_root_xy_offset,
     terrain_column_reset_root_xy_offset,
@@ -32,4 +32,15 @@ def test_mixed_hurdle_geometry() -> None:
     hurdle = MIXED_HURDLE_TERRAINS_CFG.sub_terrains["continuous_hurdle"]
     assert hurdle.hurdle_thickness == 0.05
     assert hurdle.hurdle_height_range == (0.05, 0.30)
+    assert hurdle.virtual_obstacle_keys == ("hurdle_edges",)
+
+
+def test_hurdle_only_subterrain_geometry() -> None:
+    subs = HURDLE_TERRAINS_CFG.sub_terrains
+    hurdle = subs["continuous_hurdle"]
+    assert hurdle.proportion == 1.0
+    assert _subterrain_reset_root_xy_offset("continuous_hurdle", hurdle) == (-4.0, 0.0)
+    assert hurdle.hurdle_thickness == 0.05
+    assert hurdle.hurdle_height_range == (0.05, 0.30)
+    assert hurdle.hurdle_spacing_range == (1.5, 1.0)
     assert hurdle.virtual_obstacle_keys == ("hurdle_edges",)
