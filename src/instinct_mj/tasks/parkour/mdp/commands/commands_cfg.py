@@ -72,6 +72,15 @@ class PoseVelocityCommandCfg(CommandTermCfg):
     show_flat_patch_candidates: bool = True
     """When True and command ``debug_vis`` is on, draw ``terrain.flat_patches[\"target\"]`` for this env's cell."""
 
+    show_cref_foothold_candidates: bool = False
+    """When True and command ``debug_vis`` is on, draw CReF-style stair foothold candidates from the reward term."""
+
+    show_cref_foothold_all_treads: bool = True
+    """When True, also draw all stair tread candidates used by ``cref_stair_foothold_reward``."""
+
+    cref_foothold_reward_name: str = "cref_stair_foothold"
+    """Reward term name used to look up the CReF-style foothold state for debug visualization."""
+
     flat_patch_target_count: int | None = None
     """If set, draw at most this many candidate patches (index order). Use for fixed-length targets (e.g. 4)."""
 

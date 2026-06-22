@@ -938,7 +938,7 @@ STAIRS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         "one_sided_stairs": PerlinOneSidedStairsTerrainCfg(
             proportion=0.8,
             step_height_range=(0.05, 0.20),
-            step_width=0.3,
+            step_width=0.35,
             platform_width=1.5,
             lateral_width=(2.0, 4.0),
             stair_face="neg_x",

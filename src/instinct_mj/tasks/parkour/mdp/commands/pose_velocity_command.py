@@ -810,6 +810,74 @@ class PoseVelocityCommand(CommandTerm):
                         label=f"flat_target_{batch}_i{i}{'_current' if is_current else ''}",
                     )
 
+            # 4b. CReF-style stair foothold candidates from the stateful reward term.
+            if self.cfg.show_cref_foothold_candidates:
+                reward_term = None
+                reward_manager = getattr(self._env, "reward_manager", None)
+                get_term_cfg = getattr(reward_manager, "get_term_cfg", None)
+                if callable(get_term_cfg):
+                    try:
+                        term_cfg = get_term_cfg(self.cfg.cref_foothold_reward_name)
+                        reward_term = getattr(term_cfg, "func", None)
+                    except (AttributeError, ValueError):
+                        reward_term = None
+                if reward_term is not None and bool(getattr(reward_term, "_enabled", False)):
+                    terrain_level = int(self.terrain.terrain_levels[batch].item())
+                    terrain_type = int(self.terrain.terrain_types[batch].item())
+                    origins_t = getattr(reward_term, "terrain_origins", None)
+                    treads_t = getattr(reward_term, "treads_xz_local", None)
+                    tread_counts_t = getattr(reward_term, "tread_counts", None)
+                    frozen_t = getattr(reward_term, "frozen_candidates_xz", None)
+                    frozen_counts_t = getattr(reward_term, "frozen_candidate_counts", None)
+                    if (
+                        isinstance(origins_t, torch.Tensor)
+                        and isinstance(treads_t, torch.Tensor)
+                        and isinstance(tread_counts_t, torch.Tensor)
+                        and isinstance(frozen_t, torch.Tensor)
+                        and isinstance(frozen_counts_t, torch.Tensor)
+                    ):
+                        origin = origins_t[terrain_level, terrain_type].detach().cpu().numpy()
+                        if self.cfg.show_cref_foothold_all_treads:
+                            n_treads = int(tread_counts_t[terrain_level, terrain_type].item())
+                            treads_xz = treads_t[terrain_level, terrain_type, :n_treads].detach().cpu().numpy()
+                            for i, tread_xz in enumerate(treads_xz):
+                                center = np.array(
+                                    [origin[0] + tread_xz[0], origin[1], tread_xz[1] + 0.03],
+                                    dtype=np.float64,
+                                )
+                                visualizer.add_sphere(
+                                    center=center,
+                                    radius=0.025,
+                                    color=(0.15, 0.85, 0.35, 0.35),
+                                    label=f"cref_tread_{batch}_{i}",
+                                )
+
+                        frozen_xz = frozen_t[batch].detach().cpu().numpy()
+                        frozen_counts = frozen_counts_t[batch].detach().cpu().numpy()
+                        foot_colors = (
+                            (1.0, 0.85, 0.05, 0.9),
+                            (0.9, 0.1, 1.0, 0.9),
+                        )
+                        foot_y_offsets = (-0.12, 0.12)
+                        for foot_idx in range(frozen_xz.shape[0]):
+                            n_frozen = int(frozen_counts[foot_idx])
+                            if n_frozen <= 0:
+                                continue
+                            color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
+                            y_offset = foot_y_offsets[min(foot_idx, len(foot_y_offsets) - 1)]
+                            for i in range(n_frozen):
+                                candidate_xz = frozen_xz[foot_idx, i]
+                                center = np.array(
+                                    [origin[0] + candidate_xz[0], origin[1] + y_offset, candidate_xz[1] + 0.08],
+                                    dtype=np.float64,
+                                )
+                                visualizer.add_sphere(
+                                    center=center,
+                                    radius=0.045,
+                                    color=color,
+                                    label=f"cref_frozen_{batch}_foot{foot_idx}_{i}",
+                                )
+
             # 5. Draw full guided waypoint sequence for this env's (level, type) cell
             if self._guided_mode and self._guided_world is not None and self._guided_counts is not None:
                 terrain_level = self.terrain.terrain_levels[batch].item()

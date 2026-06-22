@@ -564,7 +564,7 @@ def instinct_adam_lite_parkour_env_cfg(
         "stand_still": RewardTermCfg(
             func=parkour_mdp.stand_still,
             weight=-0.5,
-            params={"command_name": "base_velocity", "offset": 1.0},
+            params={"command_name": "base_velocity", "offset": 4.0},
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
@@ -578,6 +578,22 @@ def instinct_adam_lite_parkour_env_cfg(
                 "command_name": "base_velocity",
                 "sensor_name": "contact_forces",
                 "vel_threshold": 0.15,
+            },
+        ),
+        "cref_stair_foothold": RewardTermCfg(
+            func=parkour_mdp.cref_stair_foothold_reward,
+            weight=1.5,
+            params={
+                "sensor_name": "contact_forces",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                ),
+                "contact_force_threshold": 1.0,
+                "s_xz": 0.15,
+                "min_forward_margin": 0.02,
+                "max_candidates_per_foot": 2,
+                "foot_height_offset": 0.065,
             },
         ),
         "yaw_cmd_double_support": RewardTermCfg(
@@ -922,6 +938,7 @@ def instinct_adam_lite_parkour_env_cfg(
                 sensor_cfg.debug_vis = True
         cfg.scene.terrain.collision_debug_vis = True
         cfg.commands["base_velocity"].debug_vis = True
+        cfg.commands["base_velocity"].show_cref_foothold_candidates = True
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
         cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False

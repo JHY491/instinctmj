@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -811,3 +812,349 @@ def undesired_contacts(
     contact_sensor: ContactSensor = env.scene[sensor_name]
     is_contact = torch.max(torch.linalg.vector_norm(contact_sensor.data.force_history, dim=-1), dim=2)[0] > threshold
     return torch.sum(is_contact.float(), dim=1)
+
+
+def _column_subterrain_names(terrain_generator_cfg: object) -> list[str]:
+    """Map each terrain column index to its sub-terrain name (proportion-weighted)."""
+    sub_terrains = getattr(terrain_generator_cfg, "sub_terrains", None)
+    num_cols = int(getattr(terrain_generator_cfg, "num_cols", 0) or 0)
+    if not isinstance(sub_terrains, dict) or num_cols <= 0:
+        return []
+
+    names = list(sub_terrains.keys())
+    proportions = [float(getattr(sub_cfg, "proportion", 0.0)) for sub_cfg in sub_terrains.values()]
+    total = sum(proportions)
+    if total <= 0.0:
+        return names[:1] * num_cols
+
+    cumulative: list[float] = []
+    running = 0.0
+    for proportion in proportions:
+        running += proportion / total
+        cumulative.append(running)
+
+    column_names: list[str] = []
+    for index in range(num_cols):
+        ratio = index / num_cols + 0.001
+        sub_index = next(i for i, threshold in enumerate(cumulative) if ratio < threshold)
+        column_names.append(names[sub_index])
+    return column_names
+
+
+def _stair_step_height_phys(sub_cfg: object) -> float:
+    step_height_range = getattr(sub_cfg, "step_height_range", (0.05, 0.20))
+    lo = float(step_height_range[0])
+    hi = float(step_height_range[1])
+    difficulty = float(getattr(sub_cfg, "difficulty", 0.5))
+    step_height = lo + difficulty * (hi - lo)
+    if bool(getattr(sub_cfg, "inverted", False)):
+        step_height *= -1.0
+    return step_height
+
+
+def _tread_candidates_xz_local_neg_x_updown(sub_cfg: object) -> list[tuple[float, float]]:
+    """Tread center (x, z) in terrain-local coordinates for neg_x up_down one-sided stairs.
+
+    Matches ``_one_sided_up_down_stairs_heightfield_x`` on the inner stair run
+    (``size_x - 2 * border_width``), not the full bordered tile extent.
+    """
+    face = getattr(sub_cfg, "stair_face", "neg_x")
+    if face != "neg_x" or not bool(getattr(sub_cfg, "up_down", False)):
+        return []
+
+    step_width = float(getattr(sub_cfg, "step_width", 0.3))
+    platform_width = float(getattr(sub_cfg, "platform_width", 1.5))
+    size = getattr(sub_cfg, "size", (8.0, 8.0))
+    border_width = float(getattr(sub_cfg, "border_width", 1.0))
+    if step_width <= 0.0:
+        return []
+
+    size_x = float(size[0])
+    inner_x = size_x - 2.0 * border_width
+    if inner_x <= 0.0:
+        return []
+
+    inner_half = 0.5 * inner_x
+    step_height = _stair_step_height_phys(sub_cfg)
+    rise_span = max(0.0, 0.5 * (inner_x - platform_width))
+    max_steps = int(rise_span // step_width)
+
+    treads: list[tuple[float, float]] = []
+    for step_idx in range(max_steps):
+        x_local = -inner_half + (step_idx + 0.5) * step_width
+        treads.append((x_local, float(step_idx) * step_height))
+
+    treads.append((0.0, float(max_steps) * step_height))
+
+    for step_idx in range(max_steps - 1, -1, -1):
+        x_local = inner_half - (step_idx + 0.5) * step_width
+        treads.append((x_local, float(step_idx) * step_height))
+
+    return treads
+
+
+def _row_difficulty(row: int, num_rows: int) -> float:
+    if num_rows <= 1:
+        return 0.5
+    return float(row) / float(num_rows - 1)
+
+
+def _sub_cfg_for_cell(
+    terrain_generator: object | None,
+    terrain_generator_cfg: object,
+    terrain_name: str,
+    row: int,
+    num_rows: int,
+    col: int,
+) -> object | None:
+    sub_cfg: object | None = None
+    get_subterrain = (
+        getattr(terrain_generator, "get_subterrain_cfg", None) if terrain_generator is not None else None
+    )
+    if callable(get_subterrain):
+        sub_cfg = get_subterrain(row, col)
+    if sub_cfg is None:
+        sub_terrains = getattr(terrain_generator_cfg, "sub_terrains", None)
+        if isinstance(sub_terrains, dict) and terrain_name in sub_terrains:
+            sub_cfg = sub_terrains[terrain_name]
+    if sub_cfg is None:
+        return None
+    if getattr(sub_cfg, "difficulty", None) is None:
+        sub_cfg = copy.copy(sub_cfg)
+        setattr(sub_cfg, "difficulty", _row_difficulty(row, num_rows))
+    return sub_cfg
+
+
+def _min_xz_distance_to_candidates(
+    foot_xz: torch.Tensor,
+    candidates_xz: torch.Tensor,
+    candidate_counts: torch.Tensor,
+) -> torch.Tensor:
+    """Minimum x-z distance from each foot position to its frozen candidate set."""
+    diff = candidates_xz - foot_xz.unsqueeze(2)
+    dist = torch.linalg.vector_norm(diff, dim=-1)
+    max_candidates = candidates_xz.shape[2]
+    valid = torch.arange(max_candidates, device=dist.device).view(1, 1, -1) < candidate_counts.unsqueeze(-1)
+    dist = dist.masked_fill(~valid, float("inf"))
+    return dist.min(dim=2).values
+
+
+class cref_stair_foothold_reward(ManagerTermBase):
+    """CReF-style terrain-aware foothold reward for one_sided_stairs (neg_x, up_down).
+
+    Per foot: on liftoff refresh and freeze tread candidates; on touchdown reward once with
+    ``exp(-d_xz / s_xz)`` where ``d_xz`` is the minimum distance to the frozen set in the
+    terrain-local x-z plane. Inactive on non-stair terrains.
+    """
+
+    _STAIRS_TERRAIN_NAME = "one_sided_stairs"
+
+    def __init__(self, cfg: Any, env: ManagerBasedRlEnv):
+        super().__init__(env)
+        self.asset_cfg: SceneEntityCfg = cfg.params.get(
+            "asset_cfg",
+            SceneEntityCfg("robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link")),
+        )
+        self.sensor_name = str(cfg.params.get("sensor_name", "contact_forces"))
+        self.contact_force_threshold = float(cfg.params.get("contact_force_threshold", 1.0))
+        self.s_xz = float(cfg.params.get("s_xz", 0.15))
+        self.min_forward_margin = float(cfg.params.get("min_forward_margin", 0.02))
+        self.max_candidates_per_foot = int(cfg.params.get("max_candidates_per_foot", 2))
+        self.foot_height_offset = float(cfg.params.get("foot_height_offset", 0.065))
+
+        asset: Entity = env.scene[self.asset_cfg.name]
+        if isinstance(self.asset_cfg.body_ids, slice):
+            self.body_ids = list(range(asset.num_bodies))
+        else:
+            self.body_ids = list(self.asset_cfg.body_ids)
+        self.num_feet = len(self.body_ids)
+
+        self._enabled = False
+        terrain = env.scene.terrain
+        terrain_origins = getattr(terrain, "terrain_origins", None)
+        terrain_cfg = getattr(terrain, "cfg", None)
+        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
+        terrain_generator = getattr(terrain, "terrain_generator", None)
+
+        if terrain_origins is None or terrain_generator_cfg is None:
+            return
+
+        terrain_origins_t = torch.as_tensor(terrain_origins, dtype=torch.float32, device=env.device)
+        num_rows = int(terrain_origins_t.shape[0])
+        num_cols = int(terrain_origins_t.shape[1])
+        column_names = _column_subterrain_names(terrain_generator_cfg)
+        if len(column_names) != num_cols:
+            return
+
+        max_treads = 0
+        treads_by_cell: list[list[list[tuple[float, float]]]] = []
+        for row in range(num_rows):
+            row_treads: list[list[tuple[float, float]]] = []
+            for col in range(num_cols):
+                if column_names[col] != self._STAIRS_TERRAIN_NAME:
+                    row_treads.append([])
+                    continue
+                sub_cfg = _sub_cfg_for_cell(
+                    terrain_generator,
+                    terrain_generator_cfg,
+                    self._STAIRS_TERRAIN_NAME,
+                    row,
+                    num_rows,
+                    col,
+                )
+                treads = _tread_candidates_xz_local_neg_x_updown(sub_cfg) if sub_cfg is not None else []
+                row_treads.append(treads)
+                max_treads = max(max_treads, len(treads))
+            treads_by_cell.append(row_treads)
+
+        if max_treads <= 0:
+            return
+
+        treads_tensor = torch.zeros((num_rows, num_cols, max_treads, 2), dtype=torch.float32, device=env.device)
+        tread_counts = torch.zeros((num_rows, num_cols), dtype=torch.long, device=env.device)
+        for row in range(num_rows):
+            for col in range(num_cols):
+                treads = treads_by_cell[row][col]
+                count = len(treads)
+                tread_counts[row, col] = count
+                if count > 0:
+                    treads_tensor[row, col, :count] = torch.tensor(treads, dtype=torch.float32, device=env.device)
+
+        stairs_cols = {col for col, name in enumerate(column_names) if name == self._STAIRS_TERRAIN_NAME}
+        self._enabled = len(stairs_cols) > 0
+        self.terrain_origins = terrain_origins_t
+        self.treads_xz_local = treads_tensor
+        self.tread_counts = tread_counts
+        self.stairs_col_mask = torch.zeros(num_cols, dtype=torch.bool, device=env.device)
+        for col in stairs_cols:
+            self.stairs_col_mask[col] = True
+
+        self.prev_in_contact = torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        self.foot_armed = torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        max_frozen = self.max_candidates_per_foot
+        self.frozen_candidates_xz = torch.zeros(
+            env.num_envs, self.num_feet, max_frozen, 2, dtype=torch.float32, device=env.device
+        )
+        self.frozen_candidate_counts = torch.zeros(env.num_envs, self.num_feet, dtype=torch.long, device=env.device)
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if not self._enabled:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        in_contact = self._in_contact(self._env)
+        self.prev_in_contact[env_ids] = in_contact[env_ids]
+        self.foot_armed[env_ids] = False
+        self.frozen_candidate_counts[env_ids] = 0
+
+    def _in_contact(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        contact_sensor: ContactSensor = env.scene[self.sensor_name]
+        force_history = contact_sensor.data.force_history
+        if force_history is None:
+            return torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        return (
+            torch.max(torch.linalg.vector_norm(force_history, dim=-1), dim=2)[0] > self.contact_force_threshold
+        )
+
+    def _stairs_active_mask(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        terrain = env.scene.terrain
+        cols = terrain.terrain_types
+        return self.stairs_col_mask[cols]
+
+    def _refresh_frozen_candidates(
+        self,
+        env_ids: torch.Tensor,
+        foot_idx: int,
+        foot_x_local: torch.Tensor,
+    ) -> None:
+        terrain = self._env.scene.terrain
+        levels = terrain.terrain_levels[env_ids]
+        cols = terrain.terrain_types[env_ids]
+        batch_treads = self.treads_xz_local[levels, cols]
+        batch_counts = self.tread_counts[levels, cols]
+
+        max_all = batch_treads.shape[1]
+        max_keep = self.max_candidates_per_foot
+        device = batch_treads.device
+        valid = torch.arange(max_all, device=device).view(1, -1) < batch_counts.unsqueeze(-1)
+        forward = batch_treads[..., 0] > (foot_x_local.unsqueeze(-1) + self.min_forward_margin)
+        mask = valid & forward
+
+        x_ahead = batch_treads[..., 0] - foot_x_local.unsqueeze(-1)
+        x_ahead = x_ahead.masked_fill(~mask, float("inf"))
+        k = min(max_keep, max_all)
+        _, topk_idx = torch.topk(x_ahead, k=k, dim=-1, largest=False)
+        gathered = torch.gather(batch_treads, 1, topk_idx.unsqueeze(-1).expand(-1, -1, 2))
+        topk_x_ahead = torch.gather(x_ahead, 1, topk_idx)
+        keep_counts = torch.sum(torch.isfinite(topk_x_ahead), dim=-1)
+
+        self.frozen_candidates_xz[env_ids, foot_idx, :k] = gathered
+        if k < self.frozen_candidates_xz.shape[2]:
+            self.frozen_candidates_xz[env_ids, foot_idx, k:] = 0.0
+        self.frozen_candidate_counts[env_ids, foot_idx] = keep_counts
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg(
+            "robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link")
+        ),
+        sensor_name: str = "contact_forces",
+        contact_force_threshold: float = 1.0,
+        s_xz: float = 0.15,
+        min_forward_margin: float = 0.02,
+        max_candidates_per_foot: int = 2,
+        foot_height_offset: float = 0.065,
+    ) -> torch.Tensor:
+        del (
+            asset_cfg,
+            sensor_name,
+            contact_force_threshold,
+            s_xz,
+            min_forward_margin,
+            max_candidates_per_foot,
+            foot_height_offset,
+        )
+        if not self._enabled:
+            return torch.zeros(env.num_envs, device=env.device)
+
+        asset: Entity = env.scene[self.asset_cfg.name]
+        in_contact = self._in_contact(env)
+        stairs_active = self._stairs_active_mask(env)
+
+        terrain = env.scene.terrain
+        levels = terrain.terrain_levels
+        cols = terrain.terrain_types
+        origins = self.terrain_origins[levels, cols]
+        foot_pos_w = asset.data.body_link_pos_w[:, self.body_ids, :]
+        foot_x_local = foot_pos_w[..., 0] - origins[:, None, 0]
+        foot_z = foot_pos_w[..., 2] - self.foot_height_offset
+        foot_xz = torch.stack((foot_x_local, foot_z), dim=-1)
+
+        liftoff = self.prev_in_contact & ~in_contact & stairs_active.unsqueeze(-1)
+        touchdown = ~self.prev_in_contact & in_contact & self.foot_armed
+        touchdown &= stairs_active.unsqueeze(-1)
+        touchdown &= self.frozen_candidate_counts > 0
+
+        for foot_idx in range(self.num_feet):
+            liftoff_ids = liftoff[:, foot_idx].nonzero(as_tuple=False).flatten()
+            if liftoff_ids.numel() > 0:
+                self.foot_armed[liftoff_ids, foot_idx] = True
+                self._refresh_frozen_candidates(liftoff_ids, foot_idx, foot_x_local[liftoff_ids, foot_idx])
+
+        min_dist = _min_xz_distance_to_candidates(
+            foot_xz,
+            self.frozen_candidates_xz,
+            self.frozen_candidate_counts,
+        )
+        foot_reward = torch.exp(-min_dist / self.s_xz) * touchdown.float()
+        reward = torch.sum(foot_reward, dim=1) * stairs_active.float()
+
+        self.foot_armed = torch.where(touchdown, torch.zeros_like(self.foot_armed), self.foot_armed)
+        self.frozen_candidate_counts = torch.where(
+            touchdown,
+            torch.zeros_like(self.frozen_candidate_counts),
+            self.frozen_candidate_counts,
+        )
+        self.prev_in_contact = in_contact
+        return reward
