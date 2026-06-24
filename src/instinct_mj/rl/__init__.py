@@ -1,6 +1,8 @@
 from .config import (
+    EncoderTerrainActorCriticCfg,
     EstimatorActorCriticCfg,
     EstimatorActorCriticRecurrentCfg,
+    EstimatorWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlActorCriticRecurrentCfg,
     InstinctRlEncoderActorCriticCfg,
@@ -17,13 +19,16 @@ from .module_cfg import (
     InstinctRlConv2dHeadCfg,
     InstinctRlMlpCfg,
     InstinctRlParallelBlockCfg,
+    InstinctRlPerceptiveEncoderCfg,
     InstinctRlTransformerHeadCfg,
 )
 from .vecenv_wrapper import InstinctRlVecEnvWrapper
 
 __all__ = [
+    "EncoderTerrainActorCriticCfg",
     "EstimatorActorCriticCfg",
     "EstimatorActorCriticRecurrentCfg",
+    "EstimatorWasabiPpoAlgorithmCfg",
     "InstinctRlActorCriticCfg",
     "InstinctRlActorCriticRecurrentCfg",
     "InstinctRlConv2dHeadCfg",
@@ -36,6 +41,7 @@ __all__ = [
     "InstinctRlNormalizerCfg",
     "InstinctRlOnPolicyRunnerCfg",
     "InstinctRlParallelBlockCfg",
+    "InstinctRlPerceptiveEncoderCfg",
     "InstinctRlPpoAlgorithmCfg",
     "InstinctRlTransformerHeadCfg",
     "InstinctRlVaeActorCriticCfg",

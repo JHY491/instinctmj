@@ -54,6 +54,22 @@ class PoseVelocityCommandCfg(CommandTermCfg):
     yaw_vel_gate_threshold: float | None = None
     """If set, linear velocity is zeroed when |heading_command_w| exceeds this threshold (rad)."""
 
+    descend_speed_scale: float = 1.0
+    """Multiplier applied to the forward speed cap (lin_vel_x) while the base is descending.
+
+    1.0 disables descent slowdown. Used to slow down stair descent, where a fast command
+    produces long steps that skip a tread or land on an edge. Only the forward cap is scaled.
+    """
+
+    descend_vz_threshold: float = -0.15
+    """Smoothed world-frame base vertical velocity (m/s) below which the robot counts as descending."""
+
+    descend_vz_ema_alpha: float = 0.1
+    """Per-step EMA factor for the base vertical velocity used in descent detection (0..1)."""
+
+    descend_speed_terrain: list[str] | None = None
+    """Sub-terrain names where descent slowdown applies. None means all terrains."""
+
     lin_vel_metrics_std: float = 0.5
     """Standard deviation for the linear velocity metrics."""
 

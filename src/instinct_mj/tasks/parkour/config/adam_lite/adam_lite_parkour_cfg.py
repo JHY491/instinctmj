@@ -55,7 +55,7 @@ from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
 )
 from instinct_mj.tasks.parkour.mdp.commands import PoseVelocityCommandCfg
 from instinct_mj.terrains.terrain_importer_cfg import TerrainImporterCfg as InstinctTerrainImporterCfg
-from instinct_mj.terrains.virtual_obstacle.edge_cylinder_cfg import GreedyconcatEdgeCylinderCfg
+# from instinct_mj.terrains.virtual_obstacle.edge_cylinder_cfg import GreedyconcatEdgeCylinderCfg
 from instinct_mj.utils.noise import CropAndResizeCfg, DepthNormalizationCfg, GaussianBlurNoiseCfg
 from instinct_mj.sensors.volume_points import Grid3dPointsGeneratorCfg, VolumePointsCfg
 from instinct_mj.sensors.noisy_camera import NoisyGroupedRayCasterCameraCfg
@@ -143,25 +143,23 @@ def instinct_adam_lite_parkour_env_cfg(
 
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
-    edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
-        cylinder_radius=0.03,
-        min_points=2,
-        component_workers=0,
-        merge_collinear_gap=0.09,
-        merge_collinear_angle_threshold=30.0,
-        merge_collinear_line_distance=0.04,
-    )
+    # edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
+    #     cylinder_radius=0.03,
+    #     min_points=2,
+    #     component_workers=0,
+    #     merge_collinear_gap=0.09,
+    #     merge_collinear_angle_threshold=30.0,
+    #     merge_collinear_line_distance=0.04,
+    # )
     cfg.scene.terrain = InstinctTerrainImporterCfg(
         terrain_type="hacked_generator",
         terrain_generator=terrain_gen,
         max_init_terrain_level=5,
         virtual_obstacle_source="mesh",
-        virtual_obstacle_hfield_height_threshold=0.04,
-        collision_debug_vis=True,
+        virtual_obstacle_hfield_height_threshold=None,
+        collision_debug_vis=False,
         collision_debug_rgba=(0.62, 0.2, 0.9, 0.35),
-        virtual_obstacles={
-            "edges": edge_obstacle_cfg,
-        },
+        virtual_obstacles={},
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     geom_names = tuple(
@@ -215,6 +213,30 @@ def instinct_adam_lite_parkour_env_cfg(
             name="right_height_scanner",
             frame=ObjRef(type="body", name="right_ankle_roll_link", entity="robot"),
             pattern=GridPatternCfg(resolution=0.12, size=(0.12, 0.0)),
+            ray_alignment="yaw",
+            max_distance=10.0,
+            debug_vis=False,
+        ),
+        RayCastSensorCfg(
+            name="left_foot_sole_scanner",
+            frame=ObjRef(type="site", name="left_foot_scan", entity="robot"),
+            pattern=GridPatternCfg(resolution=0.04, size=(0.24, 0.08)),
+            ray_alignment="yaw",
+            max_distance=10.0,
+            debug_vis=False,
+        ),
+        RayCastSensorCfg(
+            name="right_foot_sole_scanner",
+            frame=ObjRef(type="site", name="right_foot_scan", entity="robot"),
+            pattern=GridPatternCfg(resolution=0.04, size=(0.24, 0.08)),
+            ray_alignment="yaw",
+            max_distance=10.0,
+            debug_vis=False,
+        ),
+        RayCastSensorCfg(
+            name="base_heightmap_scanner",
+            frame=ObjRef(type="site", name="base_heightmap_scan", entity="robot"),
+            pattern=GridPatternCfg(resolution=0.1, size=(1.0, 0.8)),
             ray_alignment="yaw",
             max_distance=10.0,
             debug_vis=False,
@@ -275,7 +297,7 @@ def instinct_adam_lite_parkour_env_cfg(
                     output_range=(0.0, 1.0),
                 ),
             },
-            data_histories={"distance_to_image_plane_noised": 47},
+            data_histories={"distance_to_image_plane_noised": 37},
             min_distance=0.1,
             max_distance=2.5,
             debug_vis=False,
@@ -310,6 +332,12 @@ def instinct_adam_lite_parkour_env_cfg(
             lin_vel_threshold=0.0,
             ang_vel_threshold=0.0,
             target_dis_threshold=0.4,
+            descend_speed_scale=0.6,
+            descend_vz_threshold=-0.15,
+            descend_vz_ema_alpha=0.1,
+            descend_speed_terrain=["one_sided_stairs"],
+            show_cref_foothold_candidates=False,
+            show_cref_foothold_all_treads=False,
         ),
     }
 
@@ -360,7 +388,7 @@ def instinct_adam_lite_parkour_env_cfg(
                 "data_type": "distance_to_image_plane_noised_history",
                 "sensor_cfg": SceneEntityCfg("camera"),
                 "history_skip_frames": 5,
-                "num_output_frames": 10,
+                "num_output_frames": 8,
                 "delayed_frame_ranges": (0, 1),
                 "debug_vis": False,
             },
@@ -409,17 +437,11 @@ def instinct_adam_lite_parkour_env_cfg(
             history_length=8,
             flatten_history_dim=True,
         ),
-        "depth_image": ObservationTermCfg(
-            func=instinct_envs_mdp.delayed_visualizable_image,
-            params={
-                "data_type": "distance_to_image_plane_noised_history",
-                "sensor_cfg": SceneEntityCfg("camera"),
-                "history_skip_frames": 5,
-                "num_output_frames": 10,
-                "delayed_frame_ranges": (0, 1),
-                "debug_vis": False,
-            },
-            noise=None,
+        # Critic sees the privileged ground-truth heightmap, so it has no use for the
+        # noisy depth image (that is the actor's deploy-time-only sensor).
+        "height_map_priv": ObservationTermCfg(
+            func=envs_mdp.height_scan,
+            params={"sensor_name": "base_heightmap_scanner"},
         ),
     }
     cfg.observations["policy"] = ObservationGroupCfg(
@@ -568,7 +590,7 @@ def instinct_adam_lite_parkour_env_cfg(
         ),
         "volume_points_penetration": RewardTermCfg(
             func=parkour_mdp.volume_points_penetration,
-            weight=-1.0,
+            weight=0.0,
             params={"sensor_name": "leg_volume_points"},
         ),
         "feet_air_time": RewardTermCfg(
@@ -580,22 +602,22 @@ def instinct_adam_lite_parkour_env_cfg(
                 "vel_threshold": 0.15,
             },
         ),
-        "cref_stair_foothold": RewardTermCfg(
-            func=parkour_mdp.cref_stair_foothold_reward,
-            weight=1.5,
-            params={
-                "sensor_name": "contact_forces",
-                "asset_cfg": SceneEntityCfg(
-                    "robot",
-                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
-                ),
-                "contact_force_threshold": 1.0,
-                "s_xz": 0.15,
-                "min_forward_margin": 0.02,
-                "max_candidates_per_foot": 2,
-                "foot_height_offset": 0.065,
-            },
-        ),
+        # "cref_stair_foothold": RewardTermCfg(
+        #     func=parkour_mdp.cref_stair_foothold_reward,
+        #     weight=0.0,
+        #     params={
+        #         "sensor_name": "contact_forces",
+        #         "asset_cfg": SceneEntityCfg(
+        #             "robot",
+        #             body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+        #         ),
+        #         "contact_force_threshold": 1.0,
+        #         "s_xz": 0.15,
+        #         "min_forward_margin": 0.02,
+        #         "max_candidates_per_foot": 1,
+        #         "foot_height_offset": 0.065,
+        #     },
+        # ),
         "yaw_cmd_double_support": RewardTermCfg(
             func=parkour_mdp.yaw_cmd_double_support,
             weight=-0.8,
@@ -606,6 +628,31 @@ def instinct_adam_lite_parkour_env_cfg(
                 "grace_period": 0.08,
                 "max_penalty_time": 0.4,
                 "random_velocity_only": False,
+            },
+        ),
+        "feet_horizontal_impact": RewardTermCfg(
+            func=parkour_mdp.feet_horizontal_impact,
+            weight=-0.02,
+            params={
+                "sensor_name": "contact_forces",
+                "force_threshold": 30.0,
+                "vertical_ratio": 0.5,
+            },
+        ),
+        "feet_unsupported": RewardTermCfg(
+            func=parkour_mdp.feet_unsupported,
+            weight=-1.0,
+            params={
+                "contact_sensor_name": "contact_forces",
+                "left_sole_scanner_name": "left_foot_sole_scanner",
+                "right_sole_scanner_name": "right_foot_sole_scanner",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                ),
+                "foot_height_offset": 0.065,
+                "gap_threshold": 0.03,
+                "contact_force_threshold": 1.0,
             },
         ),
         "feet_slide": RewardTermCfg(
@@ -827,14 +874,14 @@ def instinct_adam_lite_parkour_env_cfg(
                 "make_consistent": True,
             },
         ),
-        "register_virtual_obstacles": EventTermCfg(
-            func=instinct_envs_mdp.register_virtual_obstacle_to_sensor,
-            mode="startup",
-            params={
-                "sensor_cfgs": SceneEntityCfg("leg_volume_points"),
-                "enable_debug_vis": False,
-            },
-        ),
+        # "register_virtual_obstacles": EventTermCfg(
+        #     func=instinct_envs_mdp.register_virtual_obstacle_to_sensor,
+        #     mode="startup",
+        #     params={
+        #         "sensor_cfgs": SceneEntityCfg("leg_volume_points"),
+        #         "enable_debug_vis": False,
+        #     },
+        # ),
         "reset_base": EventTermCfg(
             func=parkour_events.reset_root_state_on_target_patch,
             
@@ -928,13 +975,19 @@ def instinct_adam_lite_parkour_env_cfg(
         terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
         terrain_generator.num_rows = 4
         terrain_generator.num_cols = 10
-        leg_volume_points_sensor = cast(
-            Any,
-            next(sensor_cfg for sensor_cfg in cfg.scene.sensors if sensor_cfg.name == "leg_volume_points"),
-        )
-        leg_volume_points_sensor.debug_vis = True
+        # leg_volume_points_sensor = cast(
+        #     Any,
+        #     next(sensor_cfg for sensor_cfg in cfg.scene.sensors if sensor_cfg.name == "leg_volume_points"),
+        # )
+        # leg_volume_points_sensor.debug_vis = True
         for sensor_cfg in cfg.scene.sensors:
             if isinstance(sensor_cfg, NoisyGroupedRayCasterCameraCfg):
+                sensor_cfg.debug_vis = True
+            if isinstance(sensor_cfg, RayCastSensorCfg) and sensor_cfg.name in (
+                "left_foot_sole_scanner",
+                "right_foot_sole_scanner",
+                "base_heightmap_scanner",
+            ):
                 sensor_cfg.debug_vis = True
         cfg.scene.terrain.collision_debug_vis = False
         base_velocity_cmd = cast(PoseVelocityCommandCfg, cfg.commands["base_velocity"])
@@ -943,7 +996,7 @@ def instinct_adam_lite_parkour_env_cfg(
         base_velocity_cmd.show_cref_foothold_candidates = False
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
-        cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
+        cfg.events.pop("register_virtual_obstacles", None)
         cfg.events.pop("show_virtual_obstacles", None)
         cfg.events["reset_robot_joints"].params = {
             "position_range": (0.0, 0.0),

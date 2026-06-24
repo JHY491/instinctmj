@@ -6,15 +6,51 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from instinct_mj.rl import (
+    EncoderTerrainActorCriticCfg,
+    EstimatorWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
     InstinctRlEncoderMoEActorCriticCfg,
-    InstinctRlEncoderActorCriticCfg,
     InstinctRlNormalizerCfg,
     InstinctRlOnPolicyRunnerCfg,
+    InstinctRlPerceptiveEncoderCfg,
     InstinctRlPpoAlgorithmCfg,
 )
 from instinct_mj.tasks.config.rl_utils import default_policy_critic_normalizers
+
+
+_ADAM_LITE_DYNAMICS_COMPONENTS = [
+    "base_ang_vel",
+    "projected_gravity",
+    "velocity_commands",
+    "joint_pos",
+    "joint_vel",
+    "actions",
+]
+
+
+def _default_perceptive_encoder_cfg() -> InstinctRlPerceptiveEncoderCfg:
+    return InstinctRlPerceptiveEncoderCfg(
+        depth_component_names=["depth_image"],
+        dynamics_component_names=list(_ADAM_LITE_DYNAMICS_COMPONENTS),
+        depth_channels=[32, 64],
+        depth_kernel_sizes=[3, 3],
+        depth_strides=[2, 2],
+        depth_paddings=[1, 1],
+        film_hidden_dim=64,
+        terrain_mlp_hidden=[128],
+        dynamics_mlp_hidden=[256, 128],
+        output_size=256,
+        nonlinearity="ReLU",
+        takeout_input_components=True,
+    )
+
+
+def _default_perceptive_encoder_configs() -> dict[str, Any]:
+    return {
+        "class_name": "PerceptiveEncoder",
+        "perceptive_encoder": _default_perceptive_encoder_cfg(),
+    }
 
 
 @dataclass(kw_only=True)
@@ -40,15 +76,20 @@ class EncoderConfigs:
 
 
 @dataclass(kw_only=True)
-class PolicyCfg(InstinctRlEncoderActorCriticCfg):
+class PolicyCfg(EncoderTerrainActorCriticCfg):
     init_noise_std: float = 1.0
     actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     activation: str = "elu"
-    encoder_configs: dict[str, Any] | None = field(default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()})
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    encoder_configs: dict[str, Any] | None = field(default_factory=_default_perceptive_encoder_configs)
+    # Critic consumes the privileged heightmap directly, so it needs no depth encoder.
+    critic_encoder_configs: dict[str, Any] | str | None = None
+    estimator_target_components: list[str] = field(default_factory=lambda: ["height_map_priv"])
+    terrain_latent_component: str = "parallel_latent_0_perceptive"
+    terrain_predictor_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [256, 128], "nonlinearity": "ReLU"}
     )
+
 
 @dataclass(kw_only=True)
 class MoEPolicyCfg(InstinctRlEncoderMoEActorCriticCfg):
@@ -60,11 +101,14 @@ class MoEPolicyCfg(InstinctRlEncoderMoEActorCriticCfg):
     encoder_configs: object = field(default_factory=lambda: EncoderConfigs())
     critic_encoder_configs: object = field(default_factory=lambda: EncoderConfigs())
 
-@dataclass(kw_only=True)
-class AmpAlgoCfg(InstinctRlPpoAlgorithmCfg):
-    """AMP algorithm config using WasabiPPO with discriminator."""
 
-    class_name: str = "WasabiPPO"
+@dataclass(kw_only=True)
+class AmpAlgoCfg(EstimatorWasabiPpoAlgorithmCfg):
+    """AMP algorithm config using EstimatorWasabiPPO with discriminator."""
+
+    class_name: str = "EstimatorWasabiPPO"
+    estimator_loss_coef: float = 1.0
+    target_from_critic: bool = True
     discriminator_kwargs: dict[str, Any] | None = field(
         default_factory=lambda: {
             "hidden_sizes": [1024, 512],

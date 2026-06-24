@@ -121,6 +121,7 @@
       <geom class="visual" material="black" mesh="pelvis" />
       <geom name="pelvis_collision" class="collision" type="sphere" size="0.113" pos="0 0 -0.01" />
       <site name="imu_in_pelvis" size="0.01" pos="0.0 0.0 0.0" />
+      <site name="base_heightmap_scan" pos="0.5 0 0" size="0.01" />
       <body name="left_hip_pitch_link" pos="0 0.0961925 -0.0332412" quat="0.953717 -0.300706 0 0">
         <inertial pos="-0.0566022 0.0576144 -0.00077159" quat="-0.0505313 0.548334 -0.448358 0.704097" mass="2.2338" diaginertia="0.00520115 0.00510328 0.00286381" />
         <joint name="left_hip_pitch_joint" class="hip_pitch" />

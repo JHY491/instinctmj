@@ -507,6 +507,80 @@ def feet_at_plane(
     return torch.sum(left_reward, dim=-1) + torch.sum(right_reward, dim=-1)
 
 
+def feet_horizontal_impact(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+    force_threshold: float = 30.0,
+    vertical_ratio: float = 0.5,
+) -> torch.Tensor:
+    """Penalize horizontal ground-reaction force on the feet ("knocking" a riser).
+
+    A foot resting flat on a tread produces a nearly vertical net force; a toe that
+    strikes the vertical face of a step on touchdown produces a large horizontal force
+    while the vertical support is still small. We therefore flag a knock only when the
+    horizontal force exceeds both an absolute floor and a fraction of the vertical
+    support, which keeps the normal braking/push-off shear of flat walking unpenalized.
+
+    Uses the ``netforce`` contact sensor, whose force is the net wrench in the world
+    frame. Returns a nonnegative magnitude per env; use a negative reward weight.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    force_history = contact_sensor.data.force_history
+    assert force_history is not None
+
+    f_horiz = torch.linalg.vector_norm(force_history[..., :2], dim=-1)
+    f_vert = torch.abs(force_history[..., 2])
+    knock = torch.clamp(f_horiz - vertical_ratio * f_vert - force_threshold, min=0.0)
+    per_foot = torch.max(knock, dim=2)[0]
+    return torch.sum(per_foot, dim=1)
+
+
+def feet_unsupported(
+    env: ManagerBasedRlEnv,
+    contact_sensor_name: str,
+    left_sole_scanner_name: str,
+    right_sole_scanner_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    foot_height_offset: float = 0.065,
+    gap_threshold: float = 0.03,
+    contact_force_threshold: float = 1.0,
+) -> torch.Tensor:
+    """Penalize a foot whose sole overhangs empty space while bearing weight.
+
+    Each foot carries a grid of downward height rays tiling its sole. A ray is
+    "unsupported" when the terrain beneath it sits more than ``gap_threshold`` below the
+    sole plane (``foot_z - foot_height_offset``), i.e. that part of the foot is hanging
+    over a step edge / drop. The penalty is the fraction of unsupported rays, gated by
+    contact, so heel-only or edge landings on stairs are discouraged in favour of full
+    foot support. Returns a nonnegative value per env; use a negative reward weight.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene[contact_sensor_name]
+    is_contact = (
+        torch.max(torch.linalg.vector_norm(contact_sensor.data.force_history, dim=-1), dim=2)[0]
+        > contact_force_threshold
+    )
+
+    left_sensor: RayCastSensor = env.scene[left_sole_scanner_name]
+    right_sensor: RayCastSensor = env.scene[right_sole_scanner_name]
+
+    foot_z = asset.data.body_link_pos_w[:, asset_cfg.body_ids, 2]
+    left_sole_z = foot_z[:, 0:1] - foot_height_offset
+    right_sole_z = foot_z[:, 1:2] - foot_height_offset
+
+    left_hit_z = left_sensor.data.hit_pos_w[..., 2]
+    right_hit_z = right_sensor.data.hit_pos_w[..., 2]
+    left_valid = left_sensor.data.distances >= 0.0
+    right_valid = right_sensor.data.distances >= 0.0
+
+    left_unsupported = (left_sole_z - left_hit_z > gap_threshold) & left_valid
+    right_unsupported = (right_sole_z - right_hit_z > gap_threshold) & right_valid
+    left_frac = left_unsupported.float().sum(dim=1) / left_valid.float().sum(dim=1).clamp(min=1.0)
+    right_frac = right_unsupported.float().sum(dim=1) / right_valid.float().sum(dim=1).clamp(min=1.0)
+
+    return left_frac * is_contact[:, 0].float() + right_frac * is_contact[:, 1].float()
+
+
 def feet_close_xy_gauss(
     env: ManagerBasedRlEnv,
     threshold: float,

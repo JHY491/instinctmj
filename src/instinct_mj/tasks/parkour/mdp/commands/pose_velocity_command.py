@@ -125,6 +125,10 @@ class PoseVelocityCommand(CommandTerm):
         self.random_ang_vel_z_range = torch.zeros(self.num_envs, 2, device=self.device)
         self.random_velocity_indices = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
+        # Descent-slowdown state: which envs are eligible, and the smoothed base vz used to detect descent.
+        self.descend_speed_indices = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        self._base_vz_ema = torch.zeros(self.num_envs, device=self.device)
+
         self.random_lin_vel_x = torch.zeros(self.num_envs, device=self.device)
         self.random_lin_vel_y = torch.zeros(self.num_envs, device=self.device)
         self.random_ang_vel_z = torch.zeros(self.num_envs, device=self.device)
@@ -196,6 +200,25 @@ class PoseVelocityCommand(CommandTerm):
                     self.random_lin_vel_y_range[env_indices, 1] = value["lin_vel_y"][1]
                     self.random_ang_vel_z_range[env_indices, 0] = value["ang_vel_z"][0]
                     self.random_ang_vel_z_range[env_indices, 1] = value["ang_vel_z"][1]
+
+        if self.cfg.descend_speed_terrain is None:
+            self.descend_speed_indices[:] = True
+        elif self.cfg.velocity_ranges is not None:
+            terrain_generator_cfg = self.terrain.cfg.terrain_generator
+            proportions = np.array([sub_cfg.proportion for sub_cfg in terrain_generator_cfg.sub_terrains.values()])
+            proportions /= np.sum(proportions)
+            sub_indices = []
+            for index in range(terrain_generator_cfg.num_cols):
+                sub_index = np.min(np.where(index / terrain_generator_cfg.num_cols + 0.001 < np.cumsum(proportions))[0])
+                sub_indices.append(sub_index)
+            sub_indices = np.array(sub_indices, dtype=np.int32)
+            sub_terrains_names = list(terrain_generator_cfg.sub_terrains.keys())
+            for key in self.cfg.descend_speed_terrain:
+                terrain_type_index = sub_terrains_names.index(key)
+                type_indices = np.where(sub_indices == terrain_type_index)[0]
+                for type_indice in type_indices:
+                    env_indices = torch.where(self.terrain.terrain_types == type_indice)[0]
+                    self.descend_speed_indices[env_indices] = True
 
         # obtain the valid targets from the terrain
         if "target" not in self.terrain.flat_patches:
@@ -656,17 +679,26 @@ class PoseVelocityCommand(CommandTerm):
             yaw_gate_mask = self.heading_command_w.abs() > self.cfg.yaw_vel_gate_threshold
             self.vel_command_b[yaw_gate_mask, :2] = 0.0
 
+        # Descent slowdown: shrink the forward speed cap while the base is steadily sinking,
+        # so stair descent takes short steps instead of long ones that skip a tread / land on an edge.
+        base_vz = self.robot.data.root_link_lin_vel_w[:, 2]
+        self._base_vz_ema = (
+            1.0 - self.cfg.descend_vz_ema_alpha
+        ) * self._base_vz_ema + self.cfg.descend_vz_ema_alpha * base_vz
+        descending = self.descend_speed_indices & (self._base_vz_ema < self.cfg.descend_vz_threshold)
+        forward_cap = self.max_command_b[:, 0] * torch.where(
+            descending,
+            torch.full_like(self._base_vz_ema, self.cfg.descend_speed_scale),
+            torch.ones_like(self._base_vz_ema),
+        )
+
         # scale linear velocity so the dominant axis hits its limit and
         # the other axis preserves its ratio
         vx = self.vel_command_b[:, 0]
         vy = self.vel_command_b[:, 1]
-        min_x = (
-            -self.max_command_b[:, 0]
-            if not self.cfg.only_positive_lin_vel_x
-            else torch.zeros_like(self.max_command_b[:, 0])
-        )
+        min_x = -forward_cap if not self.cfg.only_positive_lin_vel_x else torch.zeros_like(forward_cap)
         min_y = -self.max_command_b[:, 1]
-        max_x = self.max_command_b[:, 0]
+        max_x = forward_cap
         max_y = self.max_command_b[:, 1]
         eps = 1e-6
 

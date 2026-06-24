@@ -60,9 +60,29 @@ class InstinctRlTransformerHeadCfg(InstinctRlParallelBlockCfg):
     output_hidden_sizes: list[int] = field(default_factory=list)
 
 
+@dataclass
+class InstinctRlPerceptiveEncoderCfg:
+    """Configuration block for PerceptiveEncoder (depth + dynamics fusion)."""
+
+    class_name: str = "PerceptiveEncoder"
+    depth_component_names: list[str] = field(default_factory=lambda: ["depth_image"])
+    dynamics_component_names: list[str] = field(default_factory=list)
+    depth_channels: list[int] = field(default_factory=lambda: [32, 64])
+    depth_kernel_sizes: list[int] = field(default_factory=lambda: [3, 3])
+    depth_strides: list[int] = field(default_factory=lambda: [2, 2])
+    depth_paddings: list[int] = field(default_factory=lambda: [1, 1])
+    film_hidden_dim: int = 64
+    terrain_mlp_hidden: list[int] = field(default_factory=lambda: [128])
+    dynamics_mlp_hidden: list[int] = field(default_factory=lambda: [256, 128])
+    output_size: int = 256
+    nonlinearity: str = "ReLU"
+    takeout_input_components: bool = True
+
+
 __all__ = [
     "InstinctRlParallelBlockCfg",
     "InstinctRlMlpCfg",
     "InstinctRlConv2dHeadCfg",
     "InstinctRlTransformerHeadCfg",
+    "InstinctRlPerceptiveEncoderCfg",
 ]

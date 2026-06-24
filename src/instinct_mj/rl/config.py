@@ -209,3 +209,24 @@ class EstimatorActorCriticRecurrentCfg(InstinctRlActorCriticRecurrentCfg):
     estimator_target_components: list[str] = field(default_factory=list)
     estimator_configs: Any = None
     replace_state_prob: float = 1.0
+
+
+@dataclass
+class EncoderTerrainActorCriticCfg(InstinctRlEncoderActorCriticCfg):
+    """Encoder actor-critic with terrain height-map prediction head."""
+
+    class_name: str = "EncoderTerrainActorCritic"
+    estimator_target_components: list[str] = field(default_factory=list)
+    terrain_latent_component: str = "parallel_latent_0_perceptive"
+    terrain_predictor_configs: dict[str, Any] | None = None
+
+
+@dataclass
+class EstimatorWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
+    """WasabiPPO with estimator supervision loss."""
+
+    class_name: str = "EstimatorWasabiPPO"
+    estimator_loss_coef: float = 1.0
+    target_from_critic: bool = True
+    estimator_loss_func: str = "mse_loss"
+    estimator_loss_kwargs: dict[str, Any] | None = None
