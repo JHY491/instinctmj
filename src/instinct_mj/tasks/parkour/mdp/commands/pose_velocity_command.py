@@ -26,6 +26,52 @@ if TYPE_CHECKING:
     from .commands_cfg import PoseVelocityCommandCfg
 
 
+def _cref_all_tread_marker_centers(
+    origins: torch.Tensor,
+    treads_xz: torch.Tensor,
+    tread_counts: torch.Tensor,
+    *,
+    z_offset: float = 0.15,
+) -> list[tuple[str, np.ndarray]]:
+    """Return marker centers for every valid CReF tread candidate in the terrain grid.
+
+    The markers are intentionally lifted above the analytic tread height because
+    one_sided_stairs can add Perlin roughness comparable to low-difficulty step
+    heights, which otherwise hides markers inside the terrain surface.
+    """
+    origins_np = origins.detach().cpu().numpy()
+    treads_np = treads_xz.detach().cpu().numpy()
+    counts_np = tread_counts.detach().cpu().numpy()
+
+    centers: list[tuple[str, np.ndarray]] = []
+    num_rows, num_cols = counts_np.shape
+    for row in range(num_rows):
+        for col in range(num_cols):
+            count = int(counts_np[row, col])
+            if count <= 0:
+                continue
+            origin = origins_np[row, col]
+            for tread_idx in range(count):
+                tread_xz = treads_np[row, col, tread_idx]
+                center = np.array(
+                    [origin[0] + tread_xz[0], origin[1], tread_xz[1] + z_offset],
+                    dtype=np.float64,
+                )
+                centers.append((f"cref_tread_{row}_{col}_{tread_idx}", center))
+    return centers
+
+
+def _cref_reward_term_from_manager(reward_manager: object | None, term_name: str) -> object | None:
+    get_term_cfg = getattr(reward_manager, "get_term_cfg", None)
+    if not callable(get_term_cfg):
+        return None
+    try:
+        term_cfg = get_term_cfg(term_name)
+    except (AttributeError, ValueError):
+        return None
+    return getattr(term_cfg, "func", None)
+
+
 class PoseVelocityCommand(CommandTerm):
     """Velocity command based on the 2D flat patch command generator."""
 
@@ -691,6 +737,30 @@ class PoseVelocityCommand(CommandTerm):
         tangential_radius = 0.35
         ang_hub_z_extra = 0.12
 
+        cref_reward_term = None
+        if self.cfg.show_cref_foothold_candidates:
+            cref_reward_term = _cref_reward_term_from_manager(
+                getattr(self._env, "reward_manager", None),
+                self.cfg.cref_foothold_reward_name,
+            )
+            if cref_reward_term is not None and bool(getattr(cref_reward_term, "_enabled", False)):
+                origins_t = getattr(cref_reward_term, "terrain_origins", None)
+                treads_t = getattr(cref_reward_term, "treads_xz_local", None)
+                tread_counts_t = getattr(cref_reward_term, "tread_counts", None)
+                if (
+                    self.cfg.show_cref_foothold_all_treads
+                    and isinstance(origins_t, torch.Tensor)
+                    and isinstance(treads_t, torch.Tensor)
+                    and isinstance(tread_counts_t, torch.Tensor)
+                ):
+                    for label, center in _cref_all_tread_marker_centers(origins_t, treads_t, tread_counts_t):
+                        visualizer.add_sphere(
+                            center=center,
+                            radius=0.045,
+                            color=(0.05, 1.0, 0.25, 0.85),
+                            label=label,
+                        )
+
         for batch in env_indices:
             # Skip if robot appears uninitialized (at origin)
             if np.linalg.norm(base_pos_ws[batch]) < 1e-6:
@@ -812,45 +882,19 @@ class PoseVelocityCommand(CommandTerm):
 
             # 4b. CReF-style stair foothold candidates from the stateful reward term.
             if self.cfg.show_cref_foothold_candidates:
-                reward_term = None
-                reward_manager = getattr(self._env, "reward_manager", None)
-                get_term_cfg = getattr(reward_manager, "get_term_cfg", None)
-                if callable(get_term_cfg):
-                    try:
-                        term_cfg = get_term_cfg(self.cfg.cref_foothold_reward_name)
-                        reward_term = getattr(term_cfg, "func", None)
-                    except (AttributeError, ValueError):
-                        reward_term = None
+                reward_term = cref_reward_term
                 if reward_term is not None and bool(getattr(reward_term, "_enabled", False)):
                     terrain_level = int(self.terrain.terrain_levels[batch].item())
                     terrain_type = int(self.terrain.terrain_types[batch].item())
                     origins_t = getattr(reward_term, "terrain_origins", None)
-                    treads_t = getattr(reward_term, "treads_xz_local", None)
-                    tread_counts_t = getattr(reward_term, "tread_counts", None)
                     frozen_t = getattr(reward_term, "frozen_candidates_xz", None)
                     frozen_counts_t = getattr(reward_term, "frozen_candidate_counts", None)
                     if (
                         isinstance(origins_t, torch.Tensor)
-                        and isinstance(treads_t, torch.Tensor)
-                        and isinstance(tread_counts_t, torch.Tensor)
                         and isinstance(frozen_t, torch.Tensor)
                         and isinstance(frozen_counts_t, torch.Tensor)
                     ):
                         origin = origins_t[terrain_level, terrain_type].detach().cpu().numpy()
-                        if self.cfg.show_cref_foothold_all_treads:
-                            n_treads = int(tread_counts_t[terrain_level, terrain_type].item())
-                            treads_xz = treads_t[terrain_level, terrain_type, :n_treads].detach().cpu().numpy()
-                            for i, tread_xz in enumerate(treads_xz):
-                                center = np.array(
-                                    [origin[0] + tread_xz[0], origin[1], tread_xz[1] + 0.03],
-                                    dtype=np.float64,
-                                )
-                                visualizer.add_sphere(
-                                    center=center,
-                                    radius=0.025,
-                                    color=(0.15, 0.85, 0.35, 0.35),
-                                    label=f"cref_tread_{batch}_{i}",
-                                )
 
                         frozen_xz = frozen_t[batch].detach().cpu().numpy()
                         frozen_counts = frozen_counts_t[batch].detach().cpu().numpy()

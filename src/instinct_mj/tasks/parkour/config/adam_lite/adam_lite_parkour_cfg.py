@@ -936,12 +936,15 @@ def instinct_adam_lite_parkour_env_cfg(
         for sensor_cfg in cfg.scene.sensors:
             if isinstance(sensor_cfg, NoisyGroupedRayCasterCameraCfg):
                 sensor_cfg.debug_vis = True
-        cfg.scene.terrain.collision_debug_vis = True
-        cfg.commands["base_velocity"].debug_vis = True
-        cfg.commands["base_velocity"].show_cref_foothold_candidates = True
+        cfg.scene.terrain.collision_debug_vis = False
+        base_velocity_cmd = cast(PoseVelocityCommandCfg, cfg.commands["base_velocity"])
+        base_velocity_cmd.debug_vis = True
+        base_velocity_cmd.show_flat_patch_candidates = False
+        base_velocity_cmd.show_cref_foothold_candidates = False
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
         cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
+        cfg.events.pop("show_virtual_obstacles", None)
         cfg.events["reset_robot_joints"].params = {
             "position_range": (0.0, 0.0),
             "velocity_range": (0.0, 0.0),
