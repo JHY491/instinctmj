@@ -4,6 +4,7 @@ from instinct_mj.tasks.parkour.config.terrains.presets import (
     ADAM_LITE_BASE_PARKOUR_TERRAINS_CFG,
     ADAM_LITE_MIXED_PARKOUR_TERRAINS_CFG,
     PARKOUR_TERRAIN_CATALOG_CFG,
+    STAIRS_ONLY_TERRAINS_CFG,
 )
 from instinct_mj.terrains.height_field.hf_terrains_cfg import (
     _subterrain_reset_root_xy_offset,
@@ -19,6 +20,11 @@ def test_perlin_spawns_center_one_sided_stairs_spawn_edge() -> None:
         -4.0,
         0.0,
     )
+
+
+def test_fixed_sequence_stairs_spawn_at_explicit_ground_patch() -> None:
+    sub = STAIRS_ONLY_TERRAINS_CFG.sub_terrains["one_sided_stairs"]
+    assert _subterrain_reset_root_xy_offset("one_sided_stairs", sub) == (-3.6, 0.0)
 
 
 def test_mixed_parkour_columns_include_center_and_edge_offsets() -> None:

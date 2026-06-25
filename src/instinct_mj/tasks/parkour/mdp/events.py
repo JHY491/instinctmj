@@ -9,6 +9,7 @@ from mjlab.utils.lab_api import math as math_utils
 from mjlab.utils.lab_api.math import quat_from_euler_xyz, quat_mul, sample_uniform
 
 from instinct_mj.terrains.height_field.hf_terrains_cfg import (
+    terrain_column_fixed_sequence_reset_patch_index,
     terrain_column_reset_root_xy_offset,
     terrain_column_target_uses_fixed_sequence_flat_patch,
 )
@@ -138,7 +139,13 @@ def reset_root_state_on_target_patch(
         col_flags = torch.tensor(fixed_seq_cols, dtype=torch.bool, device=env.device)
         if col_flags.shape[0] == ncol:
             on_fixed_seq = col_flags[tts]
-            patch_ids = torch.where(on_fixed_seq, torch.zeros_like(patch_ids), patch_ids)
+            reset_indices = terrain_column_fixed_sequence_reset_patch_index(tgen)
+            if len(reset_indices) < ncol:
+                reset_indices = reset_indices + [0] * (ncol - len(reset_indices))
+            else:
+                reset_indices = reset_indices[:ncol]
+            reset_patch_ids = torch.tensor(reset_indices, dtype=torch.long, device=env.device)[tts]
+            patch_ids = torch.where(on_fixed_seq, reset_patch_ids, patch_ids)
 
     if align_z:
         target_pos_w = targets[levels, tts, patch_ids]

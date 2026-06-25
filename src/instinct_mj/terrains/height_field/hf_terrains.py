@@ -391,6 +391,17 @@ def _resolve_lateral_width(lateral_width: float | tuple[float, float] | None) ->
     return float(lateral_width)
 
 
+def _resolve_platform_width(platform_width: float | tuple[float, float]) -> float:
+    """Resolve one-sided stairs platform width, optionally sampling from a range."""
+    if isinstance(platform_width, tuple):
+        lo = float(platform_width[0])
+        hi = float(platform_width[1])
+        if lo > hi:
+            lo, hi = hi, lo
+        return float(np.random.uniform(lo, hi))
+    return float(platform_width)
+
+
 @generate_wall
 @height_field_to_mesh
 def perlin_one_sided_stairs_terrain(
@@ -419,7 +430,7 @@ def perlin_one_sided_stairs_terrain(
     length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
     step_width_px = max(1, round(cfg.step_width / cfg.horizontal_scale))
     step_height_i = round(step_height_phys / cfg.vertical_scale)
-    platform_width_px = max(1, round(cfg.platform_width / cfg.horizontal_scale))
+    platform_width_px = max(1, round(_resolve_platform_width(cfg.platform_width) / cfg.horizontal_scale))
 
     if cfg.up_down:
         face = cfg.stair_face

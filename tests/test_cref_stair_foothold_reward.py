@@ -159,6 +159,15 @@ def test_tread_candidates_cover_neg_x_updown_geometry() -> None:
     assert all(-inner_half <= x <= inner_half for x in xs)
 
 
+def test_tread_candidates_accept_platform_width_range() -> None:
+    cfg = _stairs_sub_cfg()
+    cfg.platform_width = (1.0, 1.5)
+
+    treads = _tread_candidates_xz_local_neg_x_updown(cfg)
+
+    assert len(treads) > 0
+
+
 def test_cref_stair_foothold_reward_shape() -> None:
     env = _make_stairs_env(in_contact=False, foot_x=0.0, foot_z=0.0)
     term = _make_term(env)

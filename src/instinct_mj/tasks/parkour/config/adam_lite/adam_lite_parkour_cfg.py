@@ -143,25 +143,26 @@ def instinct_adam_lite_parkour_env_cfg(
 
 
     terrain_gen = copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG_PLAY if play else STAIRS_ONLY_TERRAINS_CFG)
-    edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
-        cylinder_radius=0.03,
-        min_points=2,
-        component_workers=0,
-        merge_collinear_gap=0.09,
-        merge_collinear_angle_threshold=30.0,
-        merge_collinear_line_distance=0.04,
-    )
+    virtual_obstacles = {}
+    if not play:
+        edge_obstacle_cfg = GreedyconcatEdgeCylinderCfg(
+            cylinder_radius=0.03,
+            min_points=2,
+            component_workers=0,
+            merge_collinear_gap=0.09,
+            merge_collinear_angle_threshold=30.0,
+            merge_collinear_line_distance=0.04,
+        )
+        virtual_obstacles["edges"] = edge_obstacle_cfg
     cfg.scene.terrain = InstinctTerrainImporterCfg(
         terrain_type="hacked_generator",
         terrain_generator=terrain_gen,
         max_init_terrain_level=5,
         virtual_obstacle_source="mesh",
-        virtual_obstacle_hfield_height_threshold=0.04,
-        collision_debug_vis=True,
+        virtual_obstacle_hfield_height_threshold=None if play else 0.04,
+        collision_debug_vis=False if play else True,
         collision_debug_rgba=(0.62, 0.2, 0.9, 0.35),
-        virtual_obstacles={
-            "edges": edge_obstacle_cfg,
-        },
+        virtual_obstacles=virtual_obstacles,
     )
     cfg.scene.spec_fn = _edit_parkour_scene_spec
     geom_names = tuple(
@@ -334,6 +335,7 @@ def instinct_adam_lite_parkour_env_cfg(
             lin_vel_threshold=0.0,
             ang_vel_threshold=0.0,
             target_dis_threshold=0.4,
+            flat_patch_advance_on_arrival=True,
         ),
     }
 
@@ -884,7 +886,7 @@ def instinct_adam_lite_parkour_env_cfg(
             
             mode="reset",
             params={
-                "patch_name": "target",
+                "patch_name": "spawn",
                 "align_z_to_patch": True,
                 "pose_range": {"x": (-0.1, 0.1), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
                 "velocity_range": {
@@ -986,13 +988,13 @@ def instinct_adam_lite_parkour_env_cfg(
                 "base_heightmap_scanner",
             ):
                 sensor_cfg.debug_vis = True
-        cfg.scene.terrain.collision_debug_vis = True
+        cfg.scene.terrain.collision_debug_vis = False
         base_velocity_cmd = cast(PoseVelocityCommandCfg, cfg.commands["base_velocity"])
         base_velocity_cmd.debug_vis = True
         base_velocity_cmd.show_cref_foothold_candidates = True
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
-        cfg.events["register_virtual_obstacles"].params["enable_debug_vis"] = False
+        cfg.events.pop("register_virtual_obstacles", None)
         cfg.events.pop("show_virtual_obstacles", None)
         cfg.events["reset_robot_joints"].params = {
             "position_range": (0.0, 0.0),

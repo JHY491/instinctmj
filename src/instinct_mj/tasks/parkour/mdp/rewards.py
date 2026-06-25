@@ -926,6 +926,17 @@ def _stair_step_height_phys(sub_cfg: object) -> float:
     return step_height
 
 
+def _stair_platform_width_phys(sub_cfg: object) -> float:
+    platform_width = getattr(sub_cfg, "platform_width", 1.5)
+    if isinstance(platform_width, tuple):
+        lo = float(platform_width[0])
+        hi = float(platform_width[1])
+        if lo > hi:
+            lo, hi = hi, lo
+        return 0.5 * (lo + hi)
+    return float(platform_width)
+
+
 def _tread_candidates_xz_local_neg_x_updown(sub_cfg: object) -> list[tuple[float, float]]:
     """Tread center (x, z) in terrain-local coordinates for neg_x up_down one-sided stairs.
 
@@ -937,7 +948,7 @@ def _tread_candidates_xz_local_neg_x_updown(sub_cfg: object) -> list[tuple[float
         return []
 
     step_width = float(getattr(sub_cfg, "step_width", 0.3))
-    platform_width = float(getattr(sub_cfg, "platform_width", 1.5))
+    platform_width = _stair_platform_width_phys(sub_cfg)
     size = getattr(sub_cfg, "size", (8.0, 8.0))
     border_width = float(getattr(sub_cfg, "border_width", 1.0))
     if step_width <= 0.0:

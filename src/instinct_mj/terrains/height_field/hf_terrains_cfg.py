@@ -30,6 +30,8 @@ class FixedSequenceFlatPatchSamplingCfg(FlatPatchSamplingCfg):
     """
 
     fixed_xy_points: tuple[tuple[float, float], ...] = ()
+    fixed_y_offset_range: tuple[float, float] | None = None
+    """Optional shared center-relative y offset sampled once for all fixed points."""
     reset_command_patch_index: int = 0
     centerline_endpoint: Literal["start", "end"] | None = None
     """When set on bridge terrain cfgs, patch (x, y, z, yaw) is taken from the path centerline
@@ -146,6 +148,13 @@ def _subterrain_reset_root_xy_offset(
     if isinstance(fps, dict):
         tgt = fps.get("target")
         if isinstance(tgt, FixedSequenceFlatPatchSamplingCfg):
+            points = tuple(getattr(tgt, "fixed_xy_points", ()))
+            if len(points) > 0:
+                idx = int(getattr(tgt, "reset_command_patch_index", 0))
+                if idx < 0:
+                    idx = max(0, len(points) + idx)
+                idx = min(idx, len(points) - 1)
+                return (float(points[idx][0]), float(points[idx][1]))
             return edge_offset
         if tgt is not None:
             x_range = getattr(tgt, "x_range", None)
@@ -345,9 +354,17 @@ def _find_flat_patches_from_heightfield_nearest(
         if flat_pool.size == 0:
             raise RuntimeError("No flat heightfield cells available for fixed_xy_points targets.")
         out = np.zeros((len(fixed_xy), 3), dtype=np.float64)
+        y_offset = 0.0
+        y_offset_range = getattr(cfg, "fixed_y_offset_range", None)
+        if y_offset_range is not None:
+            lo = float(y_offset_range[0])
+            hi = float(y_offset_range[1])
+            if lo > hi:
+                lo, hi = hi, lo
+            y_offset = float(rng.uniform(lo, hi))
         for i, (fx, fy) in enumerate(fixed_xy):
             ax, ay = _flat_patch_xy_center_relative_to_corner_frame(
-                float(fx), float(fy), (float(terrain_size[0]), float(terrain_size[1]))
+                float(fx), float(fy) + y_offset, (float(terrain_size[0]), float(terrain_size[1]))
             )
             col = int(np.clip(np.round(ax / grid_scale), 0, num_cols - 1))
             row = int(np.clip(np.round(ay / grid_scale), 0, num_rows - 1))
@@ -638,7 +655,7 @@ class HfOneSidedStairsTerrainCfg(HfTerrainBaseCfg):
 
     step_height_range: tuple[float, float] = MISSING
     step_width: float = MISSING
-    platform_width: float = 1.0
+    platform_width: float | tuple[float, float] = 1.0
     # Optional lateral usable width (meters) orthogonal to stair run direction.
     # - None: use full terrain width.
     # - float: fixed lateral width.
@@ -799,7 +816,7 @@ class PerlinOneSidedStairsTerrainCfg(HfOneSidedStairsTerrainCfg, WallTerrainCfgM
 
     step_height_range: tuple[float, float] = MISSING
     step_width: float = MISSING
-    platform_width: float = 1.0
+    platform_width: float | tuple[float, float] = 1.0
     perlin_cfg: PerlinPlaneTerrainCfg | None = None
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
