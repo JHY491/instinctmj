@@ -559,15 +559,14 @@ def instinct_adam_lite_parkour_env_cfg(
         "track_ang_vel_z_exp": RewardTermCfg(
             func=parkour_mdp.track_ang_vel_z_exp,
             weight=2.0,
-            params={"command_name": "base_velocity", "std": 0.5},
+            params={"command_name": "base_velocity", "std": 0.35},
         ),
-        "ang_vel_z_excess_when_no_yaw_cmd": RewardTermCfg(
-            func=parkour_mdp.ang_vel_z_excess_when_no_yaw_cmd,
+        "ang_vel_z_overshoot": RewardTermCfg(
+            func=parkour_mdp.ang_vel_z_overshoot,
             weight=-1.0,
             params={
                 "command_name": "base_velocity",
-                "cmd_epsilon": 0.01,
-                "ang_vel_tolerance": 0.15,
+                "ang_vel_tolerance": 0.1,
             },
         ),
         "heading_error": RewardTermCfg(
@@ -597,7 +596,7 @@ def instinct_adam_lite_parkour_env_cfg(
             params={
                 "command_name": "base_velocity",
                 "sensor_name": "contact_forces",
-                "vel_threshold": 0.15,
+                "vel_threshold": 0.1,
             },
         ),
         "cref_stair_foothold": RewardTermCfg(
@@ -618,7 +617,7 @@ def instinct_adam_lite_parkour_env_cfg(
         ),
         "yaw_cmd_double_support": RewardTermCfg(
             func=parkour_mdp.yaw_cmd_double_support,
-            weight=-0.8,
+            weight=-1.2,
             params={
                 "command_name": "base_velocity",
                 "sensor_name": "contact_forces",
@@ -736,6 +735,9 @@ def instinct_adam_lite_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
+                # In-place yaw turns have zero linear command; keep feet aligned to base
+                # forward so the robot steps to turn instead of splaying hip-yaw to pivot.
+                "yaw_cmd_threshold": 0.10,
             },
         ),
         "feet_at_plane": RewardTermCfg(

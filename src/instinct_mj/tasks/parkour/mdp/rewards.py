@@ -43,24 +43,26 @@ def track_ang_vel_z_exp(
     return torch.exp(-ang_vel_error / std**2)
 
 
-def ang_vel_z_excess_when_no_yaw_cmd(
+def ang_vel_z_overshoot(
     env: ManagerBasedRlEnv,
     command_name: str,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    cmd_epsilon: float = 0.01,
     ang_vel_tolerance: float = 0.15,
 ) -> torch.Tensor:
-    """Penalize |ωz| above tolerance when yaw angular velocity command is near zero (body frame).
+    """Penalize yaw rate magnitude that exceeds the commanded magnitude (body frame).
 
-    Returns a nonnegative penalty magnitude per env; use a negative reward weight.
+    One-sided: only over-spinning is penalized (|ωz| above |ωz_cmd| + tolerance);
+    under-spinning and wrong-direction turns are left to the tracking reward. With a zero
+    yaw command this reduces to penalizing any |ωz| above tolerance (no-command drift),
+    so it subsumes the previous no-command-only behavior while also curbing the
+    over-fast in-place turns. Returns a nonnegative penalty; use a negative weight.
     """
     asset: Entity = env.scene[asset_cfg.name]
     cmd = env.command_manager.get_command(command_name)
     cmd_z_abs = torch.abs(cmd[:, 2])
     wz_abs = torch.abs(asset.data.root_link_ang_vel_b[:, 2])
-    no_yaw_cmd = cmd_z_abs < cmd_epsilon
-    excess = torch.clamp(wz_abs - ang_vel_tolerance, min=0.0)
-    return torch.square(excess) * no_yaw_cmd.float()
+    excess = torch.clamp(wz_abs - cmd_z_abs - ang_vel_tolerance, min=0.0)
+    return torch.square(excess)
 
 
 def ang_vel_z_random_velocity_band(
@@ -611,14 +613,21 @@ def feet_heading_alignment(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     cmd_threshold: float = 0.15,
     angle_scale: float = 0.10,
+    yaw_cmd_threshold: float = 0.15,
 ) -> torch.Tensor:
-    """Reward foot heading alignment with an angle-sensitive exponential shaping."""
+    """Reward foot heading alignment with an angle-sensitive exponential shaping.
+
+    Active under a linear command (walking) or a yaw command (in-place turning). The
+    target is always the base forward direction, so during a turn the feet are pulled to
+    rotate with the base instead of splaying out (hip-yaw toe-out) to pivot in place.
+    """
     asset: Entity = env.scene[asset_cfg.name]
     command_b = env.command_manager.get_command(command_name)
     assert command_b is not None
     command_xy_b = command_b[:, :2]
     command_norm = torch.linalg.vector_norm(command_xy_b, dim=-1)
-    is_active = command_norm > cmd_threshold
+    yaw_cmd_abs = torch.abs(command_b[:, 2])
+    is_active = (command_norm > cmd_threshold) | (yaw_cmd_abs > yaw_cmd_threshold)
 
     desired_dir_b = torch.zeros(env.num_envs, 3, device=command_b.device, dtype=command_b.dtype)
     desired_dir_b[:, 0] = 1.0

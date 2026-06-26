@@ -554,12 +554,11 @@ def instinct_adam_lite_bridge_l_corner_parkour_env_cfg(
             weight=0.0,
             params={"command_name": "base_velocity", "std": 0.5},
         ),
-        "ang_vel_z_excess_when_no_yaw_cmd": RewardTermCfg(
-            func=parkour_mdp.ang_vel_z_excess_when_no_yaw_cmd,
+        "ang_vel_z_overshoot": RewardTermCfg(
+            func=parkour_mdp.ang_vel_z_overshoot,
             weight=-0.5,
             params={
                 "command_name": "base_velocity",
-                "cmd_epsilon": 0.01,
                 "ang_vel_tolerance": 1.0,
             },
         ),

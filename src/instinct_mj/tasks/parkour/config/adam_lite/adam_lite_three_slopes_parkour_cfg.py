@@ -556,12 +556,11 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
             weight=2.0,
             params={"command_name": "base_velocity", "std": 0.5},
         ),
-        "ang_vel_z_excess_when_no_yaw_cmd": RewardTermCfg(
-            func=parkour_mdp.ang_vel_z_excess_when_no_yaw_cmd,
+        "ang_vel_z_overshoot": RewardTermCfg(
+            func=parkour_mdp.ang_vel_z_overshoot,
             weight=-1.0,
             params={
                 "command_name": "base_velocity",
-                "cmd_epsilon": 0.01,
                 "ang_vel_tolerance": 0.15,
             },
         ),
