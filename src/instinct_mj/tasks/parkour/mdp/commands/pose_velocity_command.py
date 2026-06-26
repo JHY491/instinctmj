@@ -61,6 +61,43 @@ def _cref_all_tread_marker_centers(
     return centers
 
 
+def _cref_all_stake_marker_centers(
+    origins: torch.Tensor,
+    stake_centers_xy: torch.Tensor,
+    stake_counts: torch.Tensor,
+    stake_z: torch.Tensor,
+    *,
+    z_offset: float = 0.15,
+) -> list[tuple[str, np.ndarray]]:
+    """Return marker centers for every valid plum-blossom stake in the terrain grid."""
+    origins_np = origins.detach().cpu().numpy()
+    stakes_xy_np = stake_centers_xy.detach().cpu().numpy()
+    counts_np = stake_counts.detach().cpu().numpy()
+    stake_z_np = stake_z.detach().cpu().numpy()
+
+    centers: list[tuple[str, np.ndarray]] = []
+    num_rows, num_cols = counts_np.shape
+    for row in range(num_rows):
+        for col in range(num_cols):
+            count = int(counts_np[row, col])
+            if count <= 0:
+                continue
+            origin = origins_np[row, col]
+            for stake_idx in range(count):
+                stake_xy = stakes_xy_np[row, col, stake_idx]
+                z_local = float(stake_z_np[row, col, stake_idx])
+                center = np.array(
+                    [
+                        origin[0] + stake_xy[0],
+                        origin[1] + stake_xy[1],
+                        origin[2] + z_local + z_offset,
+                    ],
+                    dtype=np.float64,
+                )
+                centers.append((f"cref_stake_{row}_{col}_{stake_idx}", center))
+    return centers
+
+
 def _cref_reward_term_from_manager(reward_manager: object | None, term_name: str) -> object | None:
     get_term_cfg = getattr(reward_manager, "get_term_cfg", None)
     if not callable(get_term_cfg):
@@ -777,9 +814,28 @@ class PoseVelocityCommand(CommandTerm):
             )
             if cref_reward_term is not None and bool(getattr(cref_reward_term, "_enabled", False)):
                 origins_t = getattr(cref_reward_term, "terrain_origins", None)
+                stakes_xy_t = getattr(cref_reward_term, "stake_centers_xy_local", None)
+                stake_counts_t = getattr(cref_reward_term, "stake_counts", None)
+                stake_z_t = getattr(cref_reward_term, "stake_z_local", None)
                 treads_t = getattr(cref_reward_term, "treads_xz_local", None)
                 tread_counts_t = getattr(cref_reward_term, "tread_counts", None)
                 if (
+                    self.cfg.show_cref_foothold_all_treads
+                    and isinstance(origins_t, torch.Tensor)
+                    and isinstance(stakes_xy_t, torch.Tensor)
+                    and isinstance(stake_counts_t, torch.Tensor)
+                    and isinstance(stake_z_t, torch.Tensor)
+                ):
+                    for label, center in _cref_all_stake_marker_centers(
+                        origins_t, stakes_xy_t, stake_counts_t, stake_z_t
+                    ):
+                        visualizer.add_sphere(
+                            center=center,
+                            radius=0.045,
+                            color=(0.05, 1.0, 0.25, 0.85),
+                            label=label,
+                        )
+                elif (
                     self.cfg.show_cref_foothold_all_treads
                     and isinstance(origins_t, torch.Tensor)
                     and isinstance(treads_t, torch.Tensor)
@@ -912,47 +968,77 @@ class PoseVelocityCommand(CommandTerm):
                         label=f"flat_target_{batch}_i{i}{'_current' if is_current else ''}",
                     )
 
-            # 4b. CReF-style stair foothold candidates from the stateful reward term.
+            # 4b. CReF-style foothold candidates from the stateful reward term.
             if self.cfg.show_cref_foothold_candidates:
                 reward_term = cref_reward_term
                 if reward_term is not None and bool(getattr(reward_term, "_enabled", False)):
                     terrain_level = int(self.terrain.terrain_levels[batch].item())
                     terrain_type = int(self.terrain.terrain_types[batch].item())
                     origins_t = getattr(reward_term, "terrain_origins", None)
-                    frozen_t = getattr(reward_term, "frozen_candidates_xz", None)
+                    frozen_xy_t = getattr(reward_term, "frozen_candidates_xy", None)
+                    frozen_xz_t = getattr(reward_term, "frozen_candidates_xz", None)
                     frozen_counts_t = getattr(reward_term, "frozen_candidate_counts", None)
+                    stake_z_t = getattr(reward_term, "stake_z_local", None)
                     if (
                         isinstance(origins_t, torch.Tensor)
-                        and isinstance(frozen_t, torch.Tensor)
                         and isinstance(frozen_counts_t, torch.Tensor)
                     ):
                         origin = origins_t[terrain_level, terrain_type].detach().cpu().numpy()
-
-                        frozen_xz = frozen_t[batch].detach().cpu().numpy()
                         frozen_counts = frozen_counts_t[batch].detach().cpu().numpy()
                         foot_colors = (
                             (1.0, 0.85, 0.05, 0.9),
                             (0.9, 0.1, 1.0, 0.9),
                         )
-                        foot_y_offsets = (-0.12, 0.12)
-                        for foot_idx in range(frozen_xz.shape[0]):
-                            n_frozen = int(frozen_counts[foot_idx])
-                            if n_frozen <= 0:
-                                continue
-                            color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
-                            y_offset = foot_y_offsets[min(foot_idx, len(foot_y_offsets) - 1)]
-                            for i in range(n_frozen):
-                                candidate_xz = frozen_xz[foot_idx, i]
-                                center = np.array(
-                                    [origin[0] + candidate_xz[0], origin[1] + y_offset, candidate_xz[1] + 0.08],
-                                    dtype=np.float64,
-                                )
-                                visualizer.add_sphere(
-                                    center=center,
-                                    radius=0.045,
-                                    color=color,
-                                    label=f"cref_frozen_{batch}_foot{foot_idx}_{i}",
-                                )
+                        if isinstance(frozen_xy_t, torch.Tensor):
+                            frozen_xy = frozen_xy_t[batch].detach().cpu().numpy()
+                            for foot_idx in range(frozen_xy.shape[0]):
+                                n_frozen = int(frozen_counts[foot_idx])
+                                if n_frozen <= 0:
+                                    continue
+                                color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
+                                for i in range(n_frozen):
+                                    candidate_xy = frozen_xy[foot_idx, i]
+                                    z_local = 0.0
+                                    if isinstance(stake_z_t, torch.Tensor):
+                                        cell_z = stake_z_t[terrain_level, terrain_type].detach().cpu().numpy()
+                                        z_local = float(np.max(cell_z)) if cell_z.size > 0 else 0.0
+                                    center = np.array(
+                                        [
+                                            origin[0] + candidate_xy[0],
+                                            origin[1] + candidate_xy[1],
+                                            origin[2] + z_local + 0.08,
+                                        ],
+                                        dtype=np.float64,
+                                    )
+                                    visualizer.add_sphere(
+                                        center=center,
+                                        radius=0.045,
+                                        color=color,
+                                        label=f"cref_frozen_{batch}_foot{foot_idx}_{i}",
+                                    )
+                        elif (
+                            isinstance(frozen_xz_t, torch.Tensor)
+                        ):
+                            frozen_xz = frozen_xz_t[batch].detach().cpu().numpy()
+                            foot_y_offsets = (-0.12, 0.12)
+                            for foot_idx in range(frozen_xz.shape[0]):
+                                n_frozen = int(frozen_counts[foot_idx])
+                                if n_frozen <= 0:
+                                    continue
+                                color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
+                                y_offset = foot_y_offsets[min(foot_idx, len(foot_y_offsets) - 1)]
+                                for i in range(n_frozen):
+                                    candidate_xz = frozen_xz[foot_idx, i]
+                                    center = np.array(
+                                        [origin[0] + candidate_xz[0], origin[1] + y_offset, candidate_xz[1] + 0.08],
+                                        dtype=np.float64,
+                                    )
+                                    visualizer.add_sphere(
+                                        center=center,
+                                        radius=0.045,
+                                        color=color,
+                                        label=f"cref_frozen_{batch}_foot{foot_idx}_{i}",
+                                    )
 
             # 5. Draw full guided waypoint sequence for this env's (level, type) cell
             if self._guided_mode and self._guided_world is not None and self._guided_counts is not None:

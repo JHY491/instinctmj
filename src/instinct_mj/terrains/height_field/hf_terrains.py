@@ -813,6 +813,148 @@ def perlin_wave_terrain(difficulty: float, cfg: hf_terrains_cfg.PerlinWaveTerrai
     return np.rint(hf_raw).astype(np.int16)
 
 
+def _plum_blossom_stake_width_distance(cfg: object, difficulty: float) -> tuple[float, float]:
+    stake_width_range = getattr(cfg, "stake_width_range", (0.3, 0.3))
+    stake_distance_range = getattr(cfg, "stake_distance_range", (0.2, 0.2))
+    lo_w, hi_w = float(stake_width_range[0]), float(stake_width_range[1])
+    lo_d, hi_d = float(stake_distance_range[0]), float(stake_distance_range[1])
+    stake_width = hi_w - difficulty * (hi_w - lo_w)
+    stake_distance = lo_d + difficulty * (hi_d - lo_d)
+    return stake_width, stake_distance
+
+
+def plum_blossom_stake_centers_local(
+    cfg: object,
+    difficulty: float,
+    *,
+    apply_border: bool = True,
+) -> list[tuple[float, float, float]]:
+    """Stake centers in tile-centered local coordinates (x, y, z).
+
+    Shared by height-field generation and CReF foothold reward so stake placement
+    matches guidance points. When ``apply_border`` is False the cfg size is already
+    the inner walkable extent (terrain generator sub-tile).
+    """
+    stake_width, stake_distance = _plum_blossom_stake_width_distance(cfg, difficulty)
+    if stake_width <= 0.0:
+        return []
+
+    pitch = stake_width + stake_distance
+    stake_height = float(getattr(cfg, "stake_height", 0.0))
+    platform_width = float(getattr(cfg, "platform_width", 1.5))
+    quincunx = bool(getattr(cfg, "quincunx", True))
+
+    size = getattr(cfg, "size", (8.0, 8.0))
+    border_width = float(getattr(cfg, "border_width", 0.0))
+    size_x = float(size[0])
+    size_y = float(size[1])
+    if apply_border and border_width > 0.0:
+        inner_x = size_x - 2.0 * border_width
+        inner_y = size_y - 2.0 * border_width
+    else:
+        inner_x = size_x
+        inner_y = size_y
+    if inner_x <= 0.0 or inner_y <= 0.0:
+        return []
+
+    inner_half_x = 0.5 * inner_x
+    inner_half_y = 0.5 * inner_y
+    stake_region_x_min = -inner_half_x + platform_width
+    stake_region_x_max = inner_half_x - platform_width
+    stake_region_y_min = -inner_half_y
+    stake_region_y_max = inner_half_y
+    if stake_region_x_max <= stake_region_x_min or stake_region_y_max <= stake_region_y_min:
+        return []
+
+    centers: list[tuple[float, float, float]] = []
+    col = 0
+    x = stake_region_x_min + 0.5 * stake_width
+    while x + 0.5 * stake_width <= stake_region_x_max + 1e-9:
+        y_shift = 0.5 * pitch if (quincunx and col % 2 == 1) else 0.0
+        y = stake_region_y_min + 0.5 * stake_width + y_shift
+        while y + 0.5 * stake_width <= stake_region_y_max + 1e-9:
+            centers.append((x, y, stake_height))
+            y += pitch
+        col += 1
+        x = stake_region_x_min + 0.5 * stake_width + col * pitch
+    return centers
+
+
+def _local_xy_to_pixel(
+    x_local: float,
+    y_local: float,
+    size_x: float,
+    size_y: float,
+    horizontal_scale: float,
+) -> tuple[int, int]:
+    px = int(round((x_local + 0.5 * size_x) / horizontal_scale))
+    py = int(round((y_local + 0.5 * size_y) / horizontal_scale))
+    return px, py
+
+
+@generate_wall
+@height_field_to_mesh
+def perlin_plum_blossom_stakes_terrain(
+    difficulty: float, cfg: hf_terrains_cfg.PerlinPlumBlossomStakesTerrainCfg
+) -> np.ndarray:
+    """Deterministic quincunx plum-blossom stepping stakes between end platforms."""
+    stake_width, _stake_distance = _plum_blossom_stake_width_distance(cfg, difficulty)
+
+    width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
+    length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
+    stake_width_px = max(1, round(stake_width / cfg.horizontal_scale))
+    stake_height_i = round(float(cfg.stake_height) / cfg.vertical_scale)
+    holes_depth_i = round(float(cfg.holes_depth) / cfg.vertical_scale)
+    half_stake_px = stake_width_px // 2
+
+    size_x = float(cfg.size[0])
+    size_y = float(cfg.size[1])
+    platform_width = float(cfg.platform_width)
+
+    hf_raw = np.full((length_pixels, width_pixels), holes_depth_i, dtype=np.float64)
+
+    left_x0 = -0.5 * size_x
+    left_x1 = left_x0 + platform_width
+    right_x1 = 0.5 * size_x
+    right_x0 = right_x1 - platform_width
+    px_left0, _ = _local_xy_to_pixel(left_x0, 0.0, size_x, size_y, cfg.horizontal_scale)
+    px_left1, _ = _local_xy_to_pixel(left_x1, 0.0, size_x, size_y, cfg.horizontal_scale)
+    px_right0, _ = _local_xy_to_pixel(right_x0, 0.0, size_x, size_y, cfg.horizontal_scale)
+    px_right1, _ = _local_xy_to_pixel(right_x1, 0.0, size_x, size_y, cfg.horizontal_scale)
+    px_left0 = max(0, min(width_pixels, px_left0))
+    px_left1 = max(0, min(width_pixels, px_left1))
+    px_right0 = max(0, min(width_pixels, px_right0))
+    px_right1 = max(0, min(width_pixels, px_right1))
+    if px_left1 > px_left0:
+        hf_raw[:, px_left0:px_left1] = 0.0
+    if px_right1 > px_right0:
+        hf_raw[:, px_right0:px_right1] = 0.0
+
+    centers = plum_blossom_stake_centers_local(cfg, difficulty, apply_border=False)
+    for x_local, y_local, _z_local in centers:
+        px_c, py_c = _local_xy_to_pixel(x_local, y_local, size_x, size_y, cfg.horizontal_scale)
+        px0 = max(0, px_c - half_stake_px)
+        px1 = min(width_pixels, px_c - half_stake_px + stake_width_px)
+        py0 = max(0, py_c - half_stake_px)
+        py1 = min(length_pixels, py_c - half_stake_px + stake_width_px)
+        if px1 > px0 and py1 > py0:
+            hf_raw[py0:py1, px0:px1] = float(stake_height_i)
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        perlin_noise = generate_perlin_noise(
+            difficulty,
+            perlin_cfg,  # type: ignore[arg-type]
+        )
+        hf_raw = hf_raw.astype(np.float64) + perlin_noise.astype(np.float64)
+
+    return np.rint(hf_raw).astype(np.int16)
+
+
 @generate_wall
 @height_field_to_mesh
 def perlin_stepping_stones_terrain(

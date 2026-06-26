@@ -14,6 +14,7 @@ from .hf_terrains_cfg import (
     PerlinInvertedPyramidStairsTerrainCfg,
     PerlinParapetTerrainCfg,
     PerlinPlaneTerrainCfg,
+    PerlinPlumBlossomStakesTerrainCfg,
     PerlinPyramidSlopedTerrainCfg,
     PerlinPyramidStairsTerrainCfg,
     PerlinSlopeTerrainCfg,

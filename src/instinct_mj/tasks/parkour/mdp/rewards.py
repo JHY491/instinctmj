@@ -9,6 +9,8 @@ from mjlab.managers.manager_base import ManagerTermBase
 from mjlab.sensor import ContactSensor, RayCastSensor
 from mjlab.utils.lab_api.math import quat_apply, quat_apply_inverse
 
+from instinct_mj.terrains.height_field.hf_terrains import plum_blossom_stake_centers_local
+
 if TYPE_CHECKING:
     from mjlab.entity import Entity
     from mjlab.envs import ManagerBasedRlEnv
@@ -1243,6 +1245,256 @@ class cref_stair_foothold_reward(ManagerTermBase):
         )
         foot_reward = torch.exp(-min_dist / self.s_xz) * touchdown.float()
         reward = torch.sum(foot_reward, dim=1) * stairs_active.float()
+
+        self.foot_armed = torch.where(touchdown, torch.zeros_like(self.foot_armed), self.foot_armed)
+        self.frozen_candidate_counts = torch.where(
+            touchdown,
+            torch.zeros_like(self.frozen_candidate_counts),
+            self.frozen_candidate_counts,
+        )
+        self.prev_in_contact = in_contact
+        return reward
+
+
+def _min_xy_distance_to_candidates(
+    foot_xy: torch.Tensor,
+    candidates_xy: torch.Tensor,
+    candidate_counts: torch.Tensor,
+) -> torch.Tensor:
+    """Minimum horizontal x-y distance from each foot position to its frozen candidate set."""
+    diff = candidates_xy - foot_xy.unsqueeze(2)
+    dist = torch.linalg.vector_norm(diff, dim=-1)
+    max_candidates = candidates_xy.shape[2]
+    valid = torch.arange(max_candidates, device=dist.device).view(1, 1, -1) < candidate_counts.unsqueeze(-1)
+    dist = dist.masked_fill(~valid, float("inf"))
+    return dist.min(dim=2).values
+
+
+class cref_stepping_stone_foothold_reward(ManagerTermBase):
+    """CReF-style terrain-aware foothold reward for plum_blossom_stakes.
+
+    Per foot: on liftoff refresh and freeze stake candidates; on touchdown reward once with
+    ``exp(-d_xy / s_xy)`` where ``d_xy`` is the minimum distance to the frozen set in the
+    terrain-local horizontal plane. Inactive on non-stake terrains.
+    """
+
+    _STAKES_TERRAIN_NAME = "plum_blossom_stakes"
+
+    def __init__(self, cfg: Any, env: ManagerBasedRlEnv):
+        super().__init__(env)
+        self.asset_cfg: SceneEntityCfg = cfg.params.get(
+            "asset_cfg",
+            SceneEntityCfg("robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link")),
+        )
+        self.sensor_name = str(cfg.params.get("sensor_name", "contact_forces"))
+        self.contact_force_threshold = float(cfg.params.get("contact_force_threshold", 1.0))
+        self.s_xy = float(cfg.params.get("s_xy", 0.15))
+        self.min_forward_margin = float(cfg.params.get("min_forward_margin", 0.02))
+        self.max_candidates_per_foot = int(cfg.params.get("max_candidates_per_foot", 2))
+        self.foot_height_offset = float(cfg.params.get("foot_height_offset", 0.065))
+
+        asset: Entity = env.scene[self.asset_cfg.name]
+        if isinstance(self.asset_cfg.body_ids, slice):
+            self.body_ids = list(range(asset.num_bodies))
+        else:
+            self.body_ids = list(self.asset_cfg.body_ids)
+        self.num_feet = len(self.body_ids)
+
+        self._enabled = False
+        terrain = env.scene.terrain
+        terrain_origins = getattr(terrain, "terrain_origins", None)
+        terrain_cfg = getattr(terrain, "cfg", None)
+        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
+        terrain_generator = getattr(terrain, "terrain_generator", None)
+
+        if terrain_origins is None or terrain_generator_cfg is None:
+            return
+
+        terrain_origins_t = torch.as_tensor(terrain_origins, dtype=torch.float32, device=env.device)
+        num_rows = int(terrain_origins_t.shape[0])
+        num_cols = int(terrain_origins_t.shape[1])
+        column_names = _column_subterrain_names(terrain_generator_cfg)
+        if len(column_names) != num_cols:
+            return
+
+        max_stakes = 0
+        stakes_by_cell: list[list[list[tuple[float, float, float]]]] = []
+        for row in range(num_rows):
+            row_stakes: list[list[tuple[float, float, float]]] = []
+            for col in range(num_cols):
+                if column_names[col] != self._STAKES_TERRAIN_NAME:
+                    row_stakes.append([])
+                    continue
+                sub_cfg = _sub_cfg_for_cell(
+                    terrain_generator,
+                    terrain_generator_cfg,
+                    self._STAKES_TERRAIN_NAME,
+                    row,
+                    num_rows,
+                    col,
+                )
+                if sub_cfg is None:
+                    row_stakes.append([])
+                    continue
+                difficulty = float(getattr(sub_cfg, "difficulty", 0.5))
+                stakes = plum_blossom_stake_centers_local(sub_cfg, difficulty, apply_border=True)
+                row_stakes.append(stakes)
+                max_stakes = max(max_stakes, len(stakes))
+            stakes_by_cell.append(row_stakes)
+
+        if max_stakes <= 0:
+            return
+
+        stakes_xy_tensor = torch.zeros((num_rows, num_cols, max_stakes, 2), dtype=torch.float32, device=env.device)
+        stakes_z_tensor = torch.zeros((num_rows, num_cols, max_stakes), dtype=torch.float32, device=env.device)
+        stake_counts = torch.zeros((num_rows, num_cols), dtype=torch.long, device=env.device)
+        for row in range(num_rows):
+            for col in range(num_cols):
+                stakes = stakes_by_cell[row][col]
+                count = len(stakes)
+                stake_counts[row, col] = count
+                if count > 0:
+                    stakes_xy_tensor[row, col, :count] = torch.tensor(
+                        [(x, y) for x, y, _z in stakes],
+                        dtype=torch.float32,
+                        device=env.device,
+                    )
+                    stakes_z_tensor[row, col, :count] = torch.tensor(
+                        [z for _x, _y, z in stakes],
+                        dtype=torch.float32,
+                        device=env.device,
+                    )
+
+        stakes_cols = {col for col, name in enumerate(column_names) if name == self._STAKES_TERRAIN_NAME}
+        self._enabled = len(stakes_cols) > 0
+        self.terrain_origins = terrain_origins_t
+        self.stake_centers_xy_local = stakes_xy_tensor
+        self.stake_z_local = stakes_z_tensor
+        self.stake_counts = stake_counts
+        self.stakes_col_mask = torch.zeros(num_cols, dtype=torch.bool, device=env.device)
+        for col in stakes_cols:
+            self.stakes_col_mask[col] = True
+
+        self.prev_in_contact = torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        self.foot_armed = torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        max_frozen = self.max_candidates_per_foot
+        self.frozen_candidates_xy = torch.zeros(
+            env.num_envs, self.num_feet, max_frozen, 2, dtype=torch.float32, device=env.device
+        )
+        self.frozen_candidate_counts = torch.zeros(env.num_envs, self.num_feet, dtype=torch.long, device=env.device)
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if not self._enabled:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        in_contact = self._in_contact(self._env)
+        self.prev_in_contact[env_ids] = in_contact[env_ids]
+        self.foot_armed[env_ids] = False
+        self.frozen_candidate_counts[env_ids] = 0
+
+    def _in_contact(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        contact_sensor: ContactSensor = env.scene[self.sensor_name]
+        force_history = contact_sensor.data.force_history
+        if force_history is None:
+            return torch.zeros(env.num_envs, self.num_feet, dtype=torch.bool, device=env.device)
+        return (
+            torch.max(torch.linalg.vector_norm(force_history, dim=-1), dim=2)[0] > self.contact_force_threshold
+        )
+
+    def _stakes_active_mask(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        terrain = env.scene.terrain
+        cols = terrain.terrain_types
+        return self.stakes_col_mask[cols]
+
+    def _refresh_frozen_candidates(
+        self,
+        env_ids: torch.Tensor,
+        foot_idx: int,
+        foot_x_local: torch.Tensor,
+    ) -> None:
+        terrain = self._env.scene.terrain
+        levels = terrain.terrain_levels[env_ids]
+        cols = terrain.terrain_types[env_ids]
+        batch_stakes = self.stake_centers_xy_local[levels, cols]
+        batch_counts = self.stake_counts[levels, cols]
+
+        max_all = batch_stakes.shape[1]
+        max_keep = self.max_candidates_per_foot
+        device = batch_stakes.device
+        valid = torch.arange(max_all, device=device).view(1, -1) < batch_counts.unsqueeze(-1)
+        forward = batch_stakes[..., 0] > (foot_x_local.unsqueeze(-1) + self.min_forward_margin)
+        mask = valid & forward
+
+        x_ahead = batch_stakes[..., 0] - foot_x_local.unsqueeze(-1)
+        x_ahead = x_ahead.masked_fill(~mask, float("inf"))
+        k = min(max_keep, max_all)
+        _, topk_idx = torch.topk(x_ahead, k=k, dim=-1, largest=False)
+        gathered = torch.gather(batch_stakes, 1, topk_idx.unsqueeze(-1).expand(-1, -1, 2))
+        topk_x_ahead = torch.gather(x_ahead, 1, topk_idx)
+        keep_counts = torch.sum(torch.isfinite(topk_x_ahead), dim=-1)
+
+        self.frozen_candidates_xy[env_ids, foot_idx, :k] = gathered
+        if k < self.frozen_candidates_xy.shape[2]:
+            self.frozen_candidates_xy[env_ids, foot_idx, k:] = 0.0
+        self.frozen_candidate_counts[env_ids, foot_idx] = keep_counts
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg(
+            "robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link")
+        ),
+        sensor_name: str = "contact_forces",
+        contact_force_threshold: float = 1.0,
+        s_xy: float = 0.15,
+        min_forward_margin: float = 0.02,
+        max_candidates_per_foot: int = 2,
+        foot_height_offset: float = 0.065,
+    ) -> torch.Tensor:
+        del (
+            asset_cfg,
+            sensor_name,
+            contact_force_threshold,
+            s_xy,
+            min_forward_margin,
+            max_candidates_per_foot,
+            foot_height_offset,
+        )
+        if not self._enabled:
+            return torch.zeros(env.num_envs, device=env.device)
+
+        asset: Entity = env.scene[self.asset_cfg.name]
+        in_contact = self._in_contact(env)
+        stakes_active = self._stakes_active_mask(env)
+
+        terrain = env.scene.terrain
+        levels = terrain.terrain_levels
+        cols = terrain.terrain_types
+        origins = self.terrain_origins[levels, cols]
+        foot_pos_w = asset.data.body_link_pos_w[:, self.body_ids, :]
+        foot_x_local = foot_pos_w[..., 0] - origins[:, None, 0]
+        foot_y_local = foot_pos_w[..., 1] - origins[:, None, 1]
+        foot_xy = torch.stack((foot_x_local, foot_y_local), dim=-1)
+
+        liftoff = self.prev_in_contact & ~in_contact & stakes_active.unsqueeze(-1)
+        touchdown = ~self.prev_in_contact & in_contact & self.foot_armed
+        touchdown &= stakes_active.unsqueeze(-1)
+        touchdown &= self.frozen_candidate_counts > 0
+
+        for foot_idx in range(self.num_feet):
+            liftoff_ids = liftoff[:, foot_idx].nonzero(as_tuple=False).flatten()
+            if liftoff_ids.numel() > 0:
+                self.foot_armed[liftoff_ids, foot_idx] = True
+                self._refresh_frozen_candidates(liftoff_ids, foot_idx, foot_x_local[liftoff_ids, foot_idx])
+
+        min_dist = _min_xy_distance_to_candidates(
+            foot_xy,
+            self.frozen_candidates_xy,
+            self.frozen_candidate_counts,
+        )
+        foot_reward = torch.exp(-min_dist / self.s_xy) * touchdown.float()
+        reward = torch.sum(foot_reward, dim=1) * stakes_active.float()
 
         self.foot_armed = torch.where(touchdown, torch.zeros_like(self.foot_armed), self.foot_armed)
         self.frozen_candidate_counts = torch.where(

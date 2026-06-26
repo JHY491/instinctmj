@@ -723,6 +723,16 @@ class HfSteppingStonesTerrainCfg(HfTerrainBaseCfg):
     platform_width: float = 1.0
 
 
+@dataclass(kw_only=True)
+class HfPlumBlossomStakesTerrainCfg(HfTerrainBaseCfg):
+    stake_width_range: tuple[float, float] = MISSING
+    stake_distance_range: tuple[float, float] = MISSING
+    stake_height: float = 0.0
+    holes_depth: float = -0.3
+    platform_width: float = 1.5
+    quincunx: bool = True
+
+
 @dataclass
 class WallTerrainCfgMixin:
     border_width: float = 0.0
@@ -927,6 +937,22 @@ class PerlinSteppingStonesTerrainCfg(HfSteppingStonesTerrainCfg, WallTerrainCfgM
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
         return _RAW_PERLIN_STEPPING_STONES_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+@dataclass(kw_only=True)
+class PerlinPlumBlossomStakesTerrainCfg(HfPlumBlossomStakesTerrainCfg, WallTerrainCfgMixin):
+    flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+
+    stake_width_range: tuple[float, float] = MISSING
+    stake_distance_range: tuple[float, float] = MISSING
+    stake_height: float = 0.0
+    holes_depth: float = -0.3
+    platform_width: float = 1.5
+    quincunx: bool = True
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+
+    def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
+        return _RAW_PERLIN_PLUM_BLOSSOM_STAKES_TERRAIN_FN(difficulty, cfg_for_gen)
 
 
 # -- Newly added terrain configurations for parkour terrains-- #
@@ -1772,6 +1798,7 @@ _RAW_PERLIN_SPIRAL_STAIRS_TERRAIN_FN = _unwrap_height_field_function(hf_terrains
 _RAW_PERLIN_DISCRETE_OBSTACLES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_discrete_obstacles_terrain)
 _RAW_PERLIN_WAVE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_wave_terrain)
 _RAW_PERLIN_STEPPING_STONES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stepping_stones_terrain)
+_RAW_PERLIN_PLUM_BLOSSOM_STAKES_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_plum_blossom_stakes_terrain)
 _RAW_PERLIN_PARAPET_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_parapet_terrain)
 _RAW_PERLIN_GUTTER_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_gutter_terrain)
 _RAW_PERLIN_STAIRS_UP_DOWN_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_stairs_up_down_terrain)
