@@ -853,6 +853,20 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
             func=parkour_mdp.root_height_below_env_origin_minimum,
             params={"minimum_height": 0.5},
         ),
+        "feet_on_pit_bottom": TerminationTermCfg(
+            func=parkour_mdp.feet_on_pit_bottom,
+            params={
+                "contact_sensor_name": "contact_forces",
+                "left_sole_scanner_name": "left_foot_sole_scanner",
+                "right_sole_scanner_name": "right_foot_sole_scanner",
+                "asset_cfg": SceneEntityCfg(
+                    "robot",
+                    body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
+                ),
+                "foot_height_offset": 0.065,
+                "pit_ground_height_max": -0.04,
+            },
+        ),
         "dataset_exhausted": TerminationTermCfg(
             func=instinct_envs_mdp.dataset_exhausted,
             time_out=True,

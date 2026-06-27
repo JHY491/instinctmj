@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import torch
 from mjlab.managers import SceneEntityCfg
-from mjlab.sensor import ContactSensor
+from mjlab.sensor import ContactSensor, RayCastSensor
 
 if TYPE_CHECKING:
     from mjlab.entity import Entity
@@ -52,6 +52,52 @@ def root_height_below_env_origin_minimum(
     terrain_base_height = torch.clamp(env.scene.env_origins[:, 2], max=0.0)
     root_pos_w = asset.data.root_link_pos_w
     return root_pos_w[:, 2] - terrain_base_height < minimum_height
+
+
+def feet_on_pit_bottom(
+    env: ManagerBasedRlEnv,
+    contact_sensor_name: str,
+    left_sole_scanner_name: str,
+    right_sole_scanner_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    foot_height_offset: float = 0.065,
+    ground_contact_tolerance: float = 0.04,
+    pit_ground_height_max: float = -0.04,
+    contact_force_threshold: float = 1.0,
+) -> torch.Tensor:
+    """Terminate when a loaded foot supports on terrain below stake/plate height."""
+    asset: Entity = env.scene[asset_cfg.name]
+    contact_sensor: ContactSensor = env.scene[contact_sensor_name]
+    is_contact = (
+        torch.max(torch.linalg.vector_norm(contact_sensor.data.force_history, dim=-1), dim=2)[0]
+        > contact_force_threshold
+    )
+
+    left_sensor: RayCastSensor = env.scene[left_sole_scanner_name]
+    right_sensor: RayCastSensor = env.scene[right_sole_scanner_name]
+
+    foot_z = asset.data.body_link_pos_w[:, asset_cfg.body_ids, 2]
+    left_sole_z = foot_z[:, 0:1] - foot_height_offset
+    right_sole_z = foot_z[:, 1:2] - foot_height_offset
+
+    left_hit_z = left_sensor.data.hit_pos_w[..., 2]
+    right_hit_z = right_sensor.data.hit_pos_w[..., 2]
+    left_valid = left_sensor.data.distances >= 0.0
+    right_valid = right_sensor.data.distances >= 0.0
+
+    origin_z = env.scene.env_origins[:, 2].unsqueeze(-1)
+    left_local_ground_z = left_hit_z - origin_z
+    right_local_ground_z = right_hit_z - origin_z
+
+    left_on_ground = (left_sole_z - left_hit_z).abs() < ground_contact_tolerance
+    right_on_ground = (right_sole_z - right_hit_z).abs() < ground_contact_tolerance
+
+    left_pit = left_on_ground & left_valid & (left_local_ground_z < pit_ground_height_max)
+    right_pit = right_on_ground & right_valid & (right_local_ground_z < pit_ground_height_max)
+
+    left_fail = is_contact[:, 0:1] & left_pit.any(dim=-1, keepdim=True)
+    right_fail = is_contact[:, 1:2] & right_pit.any(dim=-1, keepdim=True)
+    return torch.any(left_fail | right_fail, dim=1)
 
 
 def illegal_contact(
