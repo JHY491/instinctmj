@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import torch
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers.manager_base import ManagerTermBase
@@ -14,6 +15,7 @@ from instinct_mj.terrains.height_field.hf_terrains import plum_blossom_stake_cen
 if TYPE_CHECKING:
     from mjlab.entity import Entity
     from mjlab.envs import ManagerBasedRlEnv
+    from mjlab.viewer.debug_visualizer import DebugVisualizer
 
 
 def track_lin_vel_xy_exp(
@@ -899,14 +901,30 @@ def undesired_contacts(
     return torch.sum(is_contact.float(), dim=1)
 
 
-def _column_subterrain_names(terrain_generator_cfg: object) -> list[str]:
-    """Map each terrain column index to its sub-terrain name (proportion-weighted)."""
+def _column_subterrain_names(
+    terrain_generator_cfg: object,
+    *,
+    num_terrain_cols: int | None = None,
+) -> list[str]:
+    """Map each terrain column index to its sub-terrain name."""
     sub_terrains = getattr(terrain_generator_cfg, "sub_terrains", None)
-    num_cols = int(getattr(terrain_generator_cfg, "num_cols", 0) or 0)
-    if not isinstance(sub_terrains, dict) or num_cols <= 0:
+    if not isinstance(sub_terrains, dict) or len(sub_terrains) == 0:
         return []
 
     names = list(sub_terrains.keys())
+    num_cols = num_terrain_cols
+    if num_cols is None:
+        num_cols = int(getattr(terrain_generator_cfg, "num_cols", 0) or 0)
+    if num_cols <= 0:
+        return []
+
+    if len(names) == 1:
+        return names * num_cols
+
+    # mjlab curriculum refactor: one grid column per sub-terrain type.
+    if bool(getattr(terrain_generator_cfg, "curriculum", False)) and num_cols == len(names):
+        return names
+
     proportions = [float(getattr(sub_cfg, "proportion", 0.0)) for sub_cfg in sub_terrains.values()]
     total = sum(proportions)
     if total <= 0.0:
@@ -1015,9 +1033,27 @@ def _sub_cfg_for_cell(
             sub_cfg = sub_terrains[terrain_name]
     if sub_cfg is None:
         return None
-    if getattr(sub_cfg, "difficulty", None) is None:
+
+    generator_size = getattr(terrain_generator_cfg, "size", None)
+    needs_copy = getattr(sub_cfg, "difficulty", None) is None
+    if generator_size is not None and tuple(getattr(sub_cfg, "size", ())) != tuple(generator_size):
+        needs_copy = True
+    generator_hs = getattr(terrain_generator_cfg, "horizontal_scale", None)
+    generator_vs = getattr(terrain_generator_cfg, "vertical_scale", None)
+    if generator_hs is not None and getattr(sub_cfg, "horizontal_scale", None) != generator_hs:
+        needs_copy = True
+    if generator_vs is not None and getattr(sub_cfg, "vertical_scale", None) != generator_vs:
+        needs_copy = True
+    if needs_copy:
         sub_cfg = copy.copy(sub_cfg)
-        setattr(sub_cfg, "difficulty", _row_difficulty(row, num_rows))
+        if getattr(sub_cfg, "difficulty", None) is None:
+            setattr(sub_cfg, "difficulty", _row_difficulty(row, num_rows))
+        if generator_size is not None:
+            sub_cfg.size = tuple(generator_size)
+        if generator_hs is not None:
+            sub_cfg.horizontal_scale = generator_hs
+        if generator_vs is not None:
+            sub_cfg.vertical_scale = generator_vs
     return sub_cfg
 
 
@@ -1069,16 +1105,27 @@ class cref_stair_foothold_reward(ManagerTermBase):
         terrain = env.scene.terrain
         terrain_origins = getattr(terrain, "terrain_origins", None)
         terrain_cfg = getattr(terrain, "cfg", None)
-        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
         terrain_generator = getattr(terrain, "terrain_generator", None)
+        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
+        if terrain_generator_cfg is None and terrain_generator is not None:
+            terrain_generator_cfg = getattr(terrain_generator, "cfg", None)
 
-        if terrain_origins is None or terrain_generator_cfg is None:
+        if terrain_generator_cfg is None:
+            return
+
+        if terrain_generator is not None:
+            generator_origins = getattr(terrain_generator, "terrain_origins", None)
+            if generator_origins is not None:
+                terrain_origins = generator_origins
+        if terrain_origins is None:
             return
 
         terrain_origins_t = torch.as_tensor(terrain_origins, dtype=torch.float32, device=env.device)
+        if terrain_origins_t.ndim != 3:
+            return
         num_rows = int(terrain_origins_t.shape[0])
         num_cols = int(terrain_origins_t.shape[1])
-        column_names = _column_subterrain_names(terrain_generator_cfg)
+        column_names = _column_subterrain_names(terrain_generator_cfg, num_terrain_cols=num_cols)
         if len(column_names) != num_cols:
             return
 
@@ -1256,6 +1303,53 @@ class cref_stair_foothold_reward(ManagerTermBase):
         return reward
 
 
+def _cref_all_stake_marker_centers(
+    origins: torch.Tensor,
+    stake_centers_xy: torch.Tensor,
+    stake_counts: torch.Tensor,
+    stake_z: torch.Tensor,
+    *,
+    z_offset: float = 0.15,
+) -> list[tuple[str, np.ndarray]]:
+    """Return marker centers for every valid plum-blossom stake in the terrain grid."""
+    origins_np = origins.detach().cpu().numpy()
+    stakes_xy_np = stake_centers_xy.detach().cpu().numpy()
+    counts_np = stake_counts.detach().cpu().numpy()
+    stake_z_np = stake_z.detach().cpu().numpy()
+
+    centers: list[tuple[str, np.ndarray]] = []
+    num_rows, num_cols = counts_np.shape
+    for row in range(num_rows):
+        for col in range(num_cols):
+            count = int(counts_np[row, col])
+            if count <= 0:
+                continue
+            origin = origins_np[row, col]
+            for stake_idx in range(count):
+                stake_xy = stakes_xy_np[row, col, stake_idx]
+                z_local = float(stake_z_np[row, col, stake_idx])
+                center = np.array(
+                    [
+                        origin[0] + stake_xy[0],
+                        origin[1] + stake_xy[1],
+                        origin[2] + z_local + z_offset,
+                    ],
+                    dtype=np.float64,
+                )
+                centers.append((f"cref_stake_{row}_{col}_{stake_idx}", center))
+    return centers
+
+
+def cref_foothold_reward_visualizable(reward_term: object | None) -> bool:
+    """True when a CReF foothold reward term has stake geometry to draw."""
+    if reward_term is None:
+        return False
+    if bool(getattr(reward_term, "_enabled", False)):
+        return True
+    stake_counts = getattr(reward_term, "stake_counts", None)
+    return isinstance(stake_counts, torch.Tensor) and int(stake_counts.sum().item()) > 0
+
+
 def _min_xy_distance_to_candidates(
     foot_xy: torch.Tensor,
     candidates_xy: torch.Tensor,
@@ -1304,16 +1398,27 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         terrain = env.scene.terrain
         terrain_origins = getattr(terrain, "terrain_origins", None)
         terrain_cfg = getattr(terrain, "cfg", None)
-        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
         terrain_generator = getattr(terrain, "terrain_generator", None)
+        terrain_generator_cfg = getattr(terrain_cfg, "terrain_generator", None) if terrain_cfg is not None else None
+        if terrain_generator_cfg is None and terrain_generator is not None:
+            terrain_generator_cfg = getattr(terrain_generator, "cfg", None)
 
-        if terrain_origins is None or terrain_generator_cfg is None:
+        if terrain_generator_cfg is None:
+            return
+
+        if terrain_generator is not None:
+            generator_origins = getattr(terrain_generator, "terrain_origins", None)
+            if generator_origins is not None:
+                terrain_origins = generator_origins
+        if terrain_origins is None:
             return
 
         terrain_origins_t = torch.as_tensor(terrain_origins, dtype=torch.float32, device=env.device)
+        if terrain_origins_t.ndim != 3:
+            return
         num_rows = int(terrain_origins_t.shape[0])
         num_cols = int(terrain_origins_t.shape[1])
-        column_names = _column_subterrain_names(terrain_generator_cfg)
+        column_names = _column_subterrain_names(terrain_generator_cfg, num_terrain_cols=num_cols)
         if len(column_names) != num_cols:
             return
 
@@ -1393,6 +1498,62 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         self.foot_armed[env_ids] = False
         self.frozen_candidate_counts[env_ids] = 0
 
+    def debug_vis(self, visualizer: DebugVisualizer) -> None:
+        if not cref_foothold_reward_visualizable(self):
+            return
+
+        env = self._env
+        for label, center in _cref_all_stake_marker_centers(
+            self.terrain_origins,
+            self.stake_centers_xy_local,
+            self.stake_counts,
+            self.stake_z_local,
+        ):
+            visualizer.add_sphere(
+                center=center,
+                radius=0.045,
+                color=(0.05, 1.0, 0.25, 0.85),
+                label=label,
+            )
+
+        env_indices = visualizer.get_env_indices(env.num_envs)
+        if not env_indices:
+            return
+        terrain = env.scene.terrain
+        foot_colors = (
+            (1.0, 0.85, 0.05, 0.9),
+            (0.9, 0.1, 1.0, 0.9),
+        )
+        for batch in env_indices:
+            terrain_level = int(terrain.terrain_levels[batch].item())
+            terrain_type = int(terrain.terrain_types[batch].item())
+            origin = self.terrain_origins[terrain_level, terrain_type].detach().cpu().numpy()
+            frozen_counts = self.frozen_candidate_counts[batch].detach().cpu().numpy()
+            frozen_xy = self.frozen_candidates_xy[batch].detach().cpu().numpy()
+            cell_z = self.stake_z_local[terrain_level, terrain_type].detach().cpu().numpy()
+            z_local = float(np.max(cell_z)) if cell_z.size > 0 else 0.0
+            for foot_idx in range(frozen_xy.shape[0]):
+                n_frozen = int(frozen_counts[foot_idx])
+                if n_frozen <= 0:
+                    continue
+                color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
+                for i in range(n_frozen):
+                    candidate_xy = frozen_xy[foot_idx, i]
+                    center = np.array(
+                        [
+                            origin[0] + candidate_xy[0],
+                            origin[1] + candidate_xy[1],
+                            origin[2] + z_local + 0.08,
+                        ],
+                        dtype=np.float64,
+                    )
+                    visualizer.add_sphere(
+                        center=center,
+                        radius=0.045,
+                        color=color,
+                        label=f"cref_frozen_{batch}_foot{foot_idx}_{i}",
+                    )
+
     def _in_contact(self, env: ManagerBasedRlEnv) -> torch.Tensor:
         contact_sensor: ContactSensor = env.scene[self.sensor_name]
         force_history = contact_sensor.data.force_history
@@ -1412,6 +1573,7 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         env_ids: torch.Tensor,
         foot_idx: int,
         foot_x_local: torch.Tensor,
+        foot_y_local: torch.Tensor,
     ) -> None:
         terrain = self._env.scene.terrain
         levels = terrain.terrain_levels[env_ids]
@@ -1426,13 +1588,17 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         forward = batch_stakes[..., 0] > (foot_x_local.unsqueeze(-1) + self.min_forward_margin)
         mask = valid & forward
 
-        x_ahead = batch_stakes[..., 0] - foot_x_local.unsqueeze(-1)
-        x_ahead = x_ahead.masked_fill(~mask, float("inf"))
+        # 梅花桩是离散点、quincunx 同一列上有多个不同 y 的桩；只按前向距离选会在该列
+        # 退化成按索引顺序取到 y 边缘的桩。必须按到脚的 xy 距离选最近的，候选才落在正前方。
+        dx = batch_stakes[..., 0] - foot_x_local.unsqueeze(-1)
+        dy = batch_stakes[..., 1] - foot_y_local.unsqueeze(-1)
+        dist = torch.sqrt(dx * dx + dy * dy)
+        dist = dist.masked_fill(~mask, float("inf"))
         k = min(max_keep, max_all)
-        _, topk_idx = torch.topk(x_ahead, k=k, dim=-1, largest=False)
+        _, topk_idx = torch.topk(dist, k=k, dim=-1, largest=False)
         gathered = torch.gather(batch_stakes, 1, topk_idx.unsqueeze(-1).expand(-1, -1, 2))
-        topk_x_ahead = torch.gather(x_ahead, 1, topk_idx)
-        keep_counts = torch.sum(torch.isfinite(topk_x_ahead), dim=-1)
+        topk_dist = torch.gather(dist, 1, topk_idx)
+        keep_counts = torch.sum(torch.isfinite(topk_dist), dim=-1)
 
         self.frozen_candidates_xy[env_ids, foot_idx, :k] = gathered
         if k < self.frozen_candidates_xy.shape[2]:
@@ -1486,7 +1652,12 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
             liftoff_ids = liftoff[:, foot_idx].nonzero(as_tuple=False).flatten()
             if liftoff_ids.numel() > 0:
                 self.foot_armed[liftoff_ids, foot_idx] = True
-                self._refresh_frozen_candidates(liftoff_ids, foot_idx, foot_x_local[liftoff_ids, foot_idx])
+                self._refresh_frozen_candidates(
+                    liftoff_ids,
+                    foot_idx,
+                    foot_x_local[liftoff_ids, foot_idx],
+                    foot_y_local[liftoff_ids, foot_idx],
+                )
 
         min_dist = _min_xy_distance_to_candidates(
             foot_xy,

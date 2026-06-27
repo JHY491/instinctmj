@@ -325,10 +325,8 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
-            random_velocity_terrain=["perlin_rough_stand",],
+            random_velocity_terrain=[],
             velocity_ranges={
-                "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
-                "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
                 "plum_blossom_stakes": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
             },
             only_positive_lin_vel_x=True,
@@ -976,7 +974,6 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
         cfg.episode_length_s = 20.0
         terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
         terrain_generator.num_rows = 4
-        terrain_generator.num_cols = 10
         leg_volume_points_sensor = cast(
             Any,
             next(sensor_cfg for sensor_cfg in cfg.scene.sensors if sensor_cfg.name == "leg_volume_points"),

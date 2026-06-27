@@ -839,18 +839,26 @@ def plum_blossom_stake_centers_local(
     if stake_width <= 0.0:
         return []
 
-    pitch = stake_width + stake_distance
+    stride = stake_width + stake_distance
     stake_height = float(getattr(cfg, "stake_height", 0.0))
     platform_width = float(getattr(cfg, "platform_width", 1.5))
     quincunx = bool(getattr(cfg, "quincunx", True))
+    lateral_offset = float(getattr(cfg, "lateral_offset", 0.5))
+    num_columns_range = getattr(cfg, "num_columns_range", (6, 2))
+    n_max, n_min = int(num_columns_range[0]), int(num_columns_range[1])
 
     size = getattr(cfg, "size", (8.0, 8.0))
     border_width = float(getattr(cfg, "border_width", 0.0))
+    horizontal_scale = float(getattr(cfg, "horizontal_scale", 0.1))
     size_x = float(size[0])
     size_y = float(size[1])
     if apply_border and border_width > 0.0:
-        inner_x = size_x - 2.0 * border_width
-        inner_y = size_y - 2.0 * border_width
+        # Match HfTerrainBaseCfg.function border shrink (int pixels, not raw meters).
+        border_pixels = int(border_width / horizontal_scale)
+        length_pixels = int(size_x / horizontal_scale)
+        width_pixels = int(size_y / horizontal_scale)
+        inner_x = max(0.0, (length_pixels - 2 * border_pixels) * horizontal_scale)
+        inner_y = max(0.0, (width_pixels - 2 * border_pixels) * horizontal_scale)
     else:
         inner_x = size_x
         inner_y = size_y
@@ -861,22 +869,24 @@ def plum_blossom_stake_centers_local(
     inner_half_y = 0.5 * inner_y
     stake_region_x_min = -inner_half_x + platform_width
     stake_region_x_max = inner_half_x - platform_width
-    stake_region_y_min = -inner_half_y
-    stake_region_y_max = inner_half_y
-    if stake_region_x_max <= stake_region_x_min or stake_region_y_max <= stake_region_y_min:
+    if stake_region_x_max <= stake_region_x_min:
         return []
 
+    n_cols = round(n_max - difficulty * (n_max - n_min))
+    if n_cols % 2 == 1:
+        n_cols -= 1
+    n_cols = max(n_cols, 2)
+
     centers: list[tuple[float, float, float]] = []
-    col = 0
-    x = stake_region_x_min + 0.5 * stake_width
-    while x + 0.5 * stake_width <= stake_region_x_max + 1e-9:
-        y_shift = 0.5 * pitch if (quincunx and col % 2 == 1) else 0.0
-        y = stake_region_y_min + 0.5 * stake_width + y_shift
-        while y + 0.5 * stake_width <= stake_region_y_max + 1e-9:
-            centers.append((x, y, stake_height))
-            y += pitch
-        col += 1
-        x = stake_region_x_min + 0.5 * stake_width + col * pitch
+    for j in range(n_cols):
+        y_j = (j - (n_cols - 1) / 2.0) * lateral_offset
+        if abs(y_j) + 0.5 * stake_width > inner_half_y + 1e-9:
+            continue
+        x_offset = 0.5 * stride if (quincunx and j % 2 == 1) else 0.0
+        x = stake_region_x_min + 0.5 * stake_width + x_offset
+        while x + 0.5 * stake_width <= stake_region_x_max + 1e-9:
+            centers.append((x, y_j, stake_height))
+            x += stride
     return centers
 
 
@@ -904,7 +914,9 @@ def perlin_plum_blossom_stakes_terrain(
     length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
     stake_width_px = max(1, round(stake_width / cfg.horizontal_scale))
     stake_height_i = round(float(cfg.stake_height) / cfg.vertical_scale)
-    holes_depth_i = round(float(cfg.holes_depth) / cfg.vertical_scale)
+    shallow, deep = float(cfg.holes_depth_range[0]), float(cfg.holes_depth_range[1])
+    holes_depth = shallow + difficulty * (deep - shallow)
+    holes_depth_i = round(holes_depth / cfg.vertical_scale)
     half_stake_px = stake_width_px // 2
 
     size_x = float(cfg.size[0])

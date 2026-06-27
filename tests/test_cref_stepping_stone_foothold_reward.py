@@ -26,7 +26,9 @@ def _stakes_sub_cfg(*, difficulty: float = 0.5) -> SimpleNamespace:
         stake_width_range=(0.4, 0.4),
         stake_distance_range=(0.2, 0.2),
         stake_height=0.0,
-        holes_depth=-0.3,
+        holes_depth_range=(-0.05, -0.3),
+        lateral_offset=0.5,
+        num_columns_range=(6, 2),
         platform_width=1.5,
         quincunx=True,
         border_width=1.0,
@@ -72,6 +74,12 @@ class _FakeTerrainGeneratorCfg:
         self.sub_terrains = {
             "plum_blossom_stakes": stakes_cfg,
         }
+
+
+def _stakes_centers(*, difficulty: float = 0.5) -> list[tuple[float, float, float]]:
+    return plum_blossom_stake_centers_local(
+        _stakes_sub_cfg(difficulty=difficulty), difficulty, apply_border=True
+    )
 
 
 def _make_stakes_env(
@@ -156,15 +164,67 @@ def _local_xy_to_pixel(
 
 def test_plum_blossom_stake_centers_geometry() -> None:
     sub_cfg = _stakes_sub_cfg()
-    centers = plum_blossom_stake_centers_local(sub_cfg, 0.5, apply_border=False)
-    assert len(centers) > 0
-    xs = [x for x, _y, _z in centers]
-    ys = [y for _x, y, _z in centers]
+    lateral_offset = sub_cfg.lateral_offset
+    stride = 0.4 + 0.2
+
+    hard = plum_blossom_stake_centers_local(sub_cfg, 1.0, apply_border=False)
+    ys_hard = sorted(set(round(y, 6) for _x, y, _z in hard))
+    expected_y_hard = sorted([-0.5 * lateral_offset, 0.5 * lateral_offset])
+    assert len(ys_hard) == 2, ys_hard
+    assert ys_hard == [round(y, 6) for y in expected_y_hard]
+
+    prev_cols = 999
+    for d in (0.0, 0.25, 0.5, 0.75, 1.0):
+        centers = plum_blossom_stake_centers_local(sub_cfg, d, apply_border=False)
+        ys = sorted(set(round(y, 6) for _x, y, _z in centers))
+        assert len(ys) <= prev_cols
+        prev_cols = len(ys)
+        for y in ys:
+            assert any(abs(y + other) < 1e-6 for other in ys)
+
+    for d in (0.0, 0.5, 1.0):
+        centers = plum_blossom_stake_centers_local(sub_cfg, d, apply_border=False)
+        by_y: dict[float, list[float]] = {}
+        for x, y, _z in centers:
+            by_y.setdefault(round(y, 6), []).append(x)
+        for _y, xs in by_y.items():
+            xs_sorted = sorted(xs)
+            if len(xs_sorted) >= 2:
+                diffs = [xs_sorted[i + 1] - xs_sorted[i] for i in range(len(xs_sorted) - 1)]
+                assert all(abs(diffs[0] - diff) < 1e-4 for diff in diffs)
+
+    by_y_q: dict[float, list[float]] = {}
+    for x, y, _z in hard:
+        by_y_q.setdefault(round(y, 6), []).append(x)
+    col_ys = sorted(by_y_q.keys())
+    if len(col_ys) == 2 and sub_cfg.quincunx:
+        xs0 = sorted(by_y_q[col_ys[0]])
+        xs1 = sorted(by_y_q[col_ys[1]])
+        assert abs(abs(xs1[0] - xs0[0]) - 0.5 * stride) < 1e-4
+
+    inner_half_x = 0.5 * float(sub_cfg.size[0])
+    xs = [x for x, _y, _z in hard]
     assert min(xs) < 0.0
     assert max(xs) > 0.0
-    assert min(ys) < 0.0 or max(ys) > 0.0
-    inner_half_x = 0.5 * float(sub_cfg.size[0])
     assert all(-inner_half_x + sub_cfg.platform_width <= x <= inner_half_x - sub_cfg.platform_width for x in xs)
+
+
+def test_plum_blossom_stake_centers_match_terrain_inner_extent() -> None:
+    sub_cfg = _stakes_sub_cfg()
+    hs = 0.05
+    bw = sub_cfg.border_width
+    lp = int(sub_cfg.size[0] / hs)
+    wp = int(sub_cfg.size[1] / hs)
+    bp = int(bw / hs)
+    inner_size = ((lp - 2 * bp) * hs, (wp - 2 * bp) * hs)
+    inner_cfg = copy.copy(sub_cfg)
+    inner_cfg.size = inner_size
+    for difficulty in (0.0, 0.5, 1.0):
+        reward_centers = plum_blossom_stake_centers_local(sub_cfg, difficulty, apply_border=True)
+        terrain_centers = plum_blossom_stake_centers_local(inner_cfg, difficulty, apply_border=False)
+        assert len(reward_centers) == len(terrain_centers)
+        for reward_pt, terrain_pt in zip(reward_centers, terrain_centers):
+            assert reward_pt == terrain_pt
 
 
 def test_plum_blossom_heightfield_stakes_and_holes() -> None:
@@ -175,25 +235,34 @@ def test_plum_blossom_heightfield_stakes_and_holes() -> None:
         stake_width_range=(0.4, 0.4),
         stake_distance_range=(0.2, 0.2),
         stake_height=0.0,
-        holes_depth=-0.3,
+        holes_depth_range=(-0.05, -0.3),
+        lateral_offset=0.5,
+        num_columns_range=(6, 2),
         platform_width=1.5,
         quincunx=True,
         perlin_cfg=None,
     )
-    height_field = cfg._generate_height_field(difficulty=0.5, cfg_for_gen=cfg)
+    hf_easy = cfg._generate_height_field(difficulty=0.0, cfg_for_gen=cfg)
+    hf_hard = cfg._generate_height_field(difficulty=1.0, cfg_for_gen=cfg)
+    hf_mid = cfg._generate_height_field(difficulty=0.5, cfg_for_gen=cfg)
     stake_height_i = round(float(cfg.stake_height) / cfg.vertical_scale)
-    holes_depth_i = round(float(cfg.holes_depth) / cfg.vertical_scale)
+    holes_shallow_i = round(-0.05 / cfg.vertical_scale)
+    holes_deep_i = round(-0.3 / cfg.vertical_scale)
+    holes_mid_i = round((-0.05 + 0.5 * (-0.3 - (-0.05))) / cfg.vertical_scale)
 
     centers = plum_blossom_stake_centers_local(cfg, 0.5, apply_border=False)
     assert len(centers) > 0
     for x_local, y_local, _z_local in centers:
         px, py = _local_xy_to_pixel(x_local, y_local, float(cfg.size[0]), float(cfg.size[1]), cfg.horizontal_scale)
-        assert int(height_field[py, px]) == stake_height_i
+        assert int(hf_mid[py, px]) == stake_height_i
 
-    mid_x = 0.5 * (centers[0][0] + centers[1][0]) if len(centers) > 1 else centers[0][0]
-    mid_y = 0.5 * (centers[0][1] + centers[1][1]) if len(centers) > 1 else centers[0][1] + 0.5
-    px_mid, py_mid = _local_xy_to_pixel(mid_x, mid_y, float(cfg.size[0]), float(cfg.size[1]), cfg.horizontal_scale)
-    assert int(height_field[py_mid, px_mid]) == holes_depth_i
+    hole_mask = (hf_easy == holes_shallow_i) & (hf_hard == holes_deep_i)
+    hole_indices = np.argwhere(hole_mask)
+    assert hole_indices.shape[0] > 0
+    py_mid, px_mid = (int(hole_indices[len(hole_indices) // 2, 0]), int(hole_indices[len(hole_indices) // 2, 1]))
+    assert int(hf_easy[py_mid, px_mid]) == holes_shallow_i
+    assert int(hf_hard[py_mid, px_mid]) == holes_deep_i
+    assert int(hf_mid[py_mid, px_mid]) == holes_mid_i
 
 
 def test_cref_stepping_stone_foothold_reward_shape() -> None:
@@ -214,7 +283,7 @@ def test_no_contact_or_touchdown_without_liftoff_is_zero() -> None:
 
 
 def test_liftoff_freeze_then_touchdown_near_candidate_rewards() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     start_x, start_y, _ = centers[0]
     target_x, target_y, _ = centers[1]
     env = _make_stakes_env(in_contact=True, foot_x=start_x, foot_y=start_y)
@@ -232,7 +301,7 @@ def test_liftoff_freeze_then_touchdown_near_candidate_rewards() -> None:
 
 
 def test_touchdown_far_from_candidate_rewards_less() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     start_x, start_y, _ = centers[0]
     target_x, target_y, _ = centers[1]
     env_near = _make_stakes_env(in_contact=True, foot_x=start_x, foot_y=start_y)
@@ -272,7 +341,7 @@ def test_non_stakes_terrain_returns_zero() -> None:
 
 
 def test_liftoff_forward_filter_excludes_rear_stakes() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     liftoff_x = -1.0
     env = _make_stakes_env(in_contact=True, foot_x=liftoff_x, foot_y=centers[0][1])
     term = _make_term(env)
@@ -291,7 +360,7 @@ def test_liftoff_forward_filter_excludes_rear_stakes() -> None:
 
 
 def test_xy_distance_matches_exp_reward() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     start_x, start_y, _ = centers[0]
     target_x, target_y, _ = centers[1]
     env = _make_stakes_env(in_contact=True, foot_x=start_x, foot_y=start_y)
@@ -311,7 +380,7 @@ def test_xy_distance_matches_exp_reward() -> None:
 
 
 def test_touchdown_clears_armed_and_does_not_repeat_reward() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     start_x, start_y, _ = centers[0]
     target_x, target_y, _ = centers[1]
     env = _make_stakes_env(in_contact=True, foot_x=start_x, foot_y=start_y)
@@ -332,7 +401,7 @@ def test_touchdown_clears_armed_and_does_not_repeat_reward() -> None:
 
 
 def test_reset_avoids_initial_touchdown_reward() -> None:
-    centers = plum_blossom_stake_centers_local(_stakes_sub_cfg(), 0.5, apply_border=False)
+    centers = _stakes_centers()
     target_x, target_y, _ = centers[0]
     env = _make_stakes_env(in_contact=True, foot_x=target_x, foot_y=target_y)
     term = _make_term(env)

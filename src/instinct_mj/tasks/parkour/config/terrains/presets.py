@@ -985,111 +985,23 @@ PLUM_BLOSSOM_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     size=(8.0, 8.0),
     border_width=5.0,
     num_rows=10,
-    num_cols=20,
+    num_cols=1,
     horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=1.0,
     curriculum=True,
     add_lights=True,
     sub_terrains={
-        "perlin_rough": PerlinPlaneTerrainCfg(
-            proportion=0.1,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "perlin_rough_stand": PerlinPlaneTerrainCfg(
-            proportion=0.1,
-            noise_scale=[0.0, 0.1],
-            noise_frequency=20,
-            fractal_octaves=2,
-            fractal_lacunarity=2.0,
-            fractal_gain=0.25,
-            centering=True,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50, patch_radius=[0.05, 0.10, 0.15, 0.20], max_height_diff=0.05
-                ),
-            },
-        ),
-        "pyramid_stairs": PerlinPyramidStairsTerrainCfg(
-            proportion=0.0,
-            step_height_range=(0.05, 0.20),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
-        "pyramid_stairs_inv": PerlinInvertedPyramidStairsTerrainCfg(
-            proportion=0.0,
-            step_height_range=(0.05, 0.20),
-            step_width=0.3,
-            platform_width=2.5,
-            border_width=1.0,
-            wall_prob=[0.0, 0.0, 0.0, 0.0],
-            wall_height=0.0,
-            wall_thickness=0.05,
-            perlin_cfg=PerlinPlaneTerrainCfg(
-                noise_scale=0.05,
-                noise_frequency=20,
-                fractal_octaves=2,
-                fractal_lacunarity=2.0,
-                fractal_gain=0.25,
-                centering=True,
-            ),
-            flat_patch_sampling={
-                "target": FlatPatchSamplingCfg(
-                    num_patches=50,
-                    patch_radius=[0.05, 0.10, 0.15, 0.20],
-                    max_height_diff=0.05,
-                    x_range=(3.7, 3.7),
-                    y_range=(-0.0, 0.0),
-                ),
-            },
-        ),
         "plum_blossom_stakes": PerlinPlumBlossomStakesTerrainCfg(
-            proportion=0.8,
+            proportion=1.0,
             stake_width_range=(0.3, 0.5),
             stake_distance_range=(0.10, 0.35),
             stake_height=0.0,
-            holes_depth=-0.3,
+            holes_depth_range=(-0.05, -0.3),
             platform_width=1.5,
             quincunx=True,
+            lateral_offset=0.5,
+            num_columns_range=(6, 2),
             border_width=1.0,
             # spawn 在低-x 端平台，使机器人从一头走到另一头，避免 reset 到 tile 中心
             reset_root_xy_offset=(-3.6, 0.0),
@@ -1118,7 +1030,7 @@ PLUM_BLOSSOM_TERRAINS_CFG = FiledTerrainGeneratorCfg(
         ),
     },
 )
-PLUM_BLOSSOM_TERRAINS_CFG_PLAY = _play_cfg(PLUM_BLOSSOM_TERRAINS_CFG)
+PLUM_BLOSSOM_TERRAINS_CFG_PLAY = _play_cfg(PLUM_BLOSSOM_TERRAINS_CFG, rows=4, cols=1)
 
 # ---------------------------------------------------------------------------
 # Three slopes (training num_cols=20)

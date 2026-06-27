@@ -169,6 +169,38 @@ class MultiRewardManager(RewardManager):
         index = self.__group_term_names[group_name].index(term_name)
         return self.__group_term_cfgs[group_name][index]
 
+    def get_term_func(self, term_name: str, group_name: str | None = None) -> object | None:
+        """Return the instantiated reward term for ``term_name``."""
+        if group_name is None:
+            for group, names in self.__group_term_names.items():
+                if term_name in names:
+                    group_name = group
+                    break
+            else:
+                return None
+        if group_name not in self.__group_term_names:
+            return None
+        names = self.__group_term_names[group_name]
+        if term_name not in names:
+            return None
+        index = names.index(term_name)
+        return self.__group_term_cfgs[group_name][index].func
+
+    def get_visualizable_terms(self) -> list[tuple[str, object]]:
+        results: list[tuple[str, object]] = []
+        for group_name, names in self.__group_term_names.items():
+            for term_name, term_cfg in zip(names, self.__group_term_cfgs[group_name]):
+                if not isinstance(term_cfg.func, ManagerTermBase):
+                    continue
+                if not hasattr(term_cfg.func, "debug_vis"):
+                    continue
+                results.append((f"{group_name}/{term_name}", term_cfg.func))
+        return results
+
+    def debug_vis(self, visualizer) -> None:
+        for _, func in self.get_visualizable_terms():
+            func.debug_vis(visualizer)
+
     def get_active_iterable_terms(self, env_idx: int) -> Sequence[tuple[str, Sequence[float]]]:
         terms = []
         for group_name in self.__group_term_cfgs.keys():

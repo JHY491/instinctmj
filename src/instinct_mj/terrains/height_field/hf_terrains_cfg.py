@@ -728,9 +728,11 @@ class HfPlumBlossomStakesTerrainCfg(HfTerrainBaseCfg):
     stake_width_range: tuple[float, float] = MISSING
     stake_distance_range: tuple[float, float] = MISSING
     stake_height: float = 0.0
-    holes_depth: float = -0.3
+    holes_depth_range: tuple[float, float] = (-0.05, -0.3)
     platform_width: float = 1.5
     quincunx: bool = True
+    lateral_offset: float = 0.5
+    num_columns_range: tuple[int, int] = (6, 2)
 
 
 @dataclass
@@ -946,9 +948,11 @@ class PerlinPlumBlossomStakesTerrainCfg(HfPlumBlossomStakesTerrainCfg, WallTerra
     stake_width_range: tuple[float, float] = MISSING
     stake_distance_range: tuple[float, float] = MISSING
     stake_height: float = 0.0
-    holes_depth: float = -0.3
+    holes_depth_range: tuple[float, float] = (-0.05, -0.3)
     platform_width: float = 1.5
     quincunx: bool = True
+    lateral_offset: float = 0.5
+    num_columns_range: tuple[int, int] = (6, 2)
     perlin_cfg: PerlinPlaneTerrainCfg | None = None
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:

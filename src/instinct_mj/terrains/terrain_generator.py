@@ -578,16 +578,44 @@ class FiledTerrainGenerator(TerrainGenerator):
         """Get the specific configurations for all subterrains."""
         return self._subterrain_specific_cfgs.copy()  # Return a copy to avoid external modification.
 
+    def _grid_num_cols(self) -> int:
+        """Grid column count; mjlab >= curriculum refactor exposes ``_num_cols``."""
+        num_cols = getattr(self, "_num_cols", None)
+        if num_cols is not None:
+            return int(num_cols)
+        return int(self.cfg.num_cols)
+
     def get_subterrain_cfg(
         self, row_ids: int | torch.Tensor, col_ids: int | torch.Tensor
     ) -> list[SubTerrainBaseCfg] | SubTerrainBaseCfg | None:
         """Get the specific configuration for a subterrain by its row and column index."""
-        num_cols = self.cfg.num_cols
-        idx = row_ids * num_cols + col_ids
-        if isinstance(idx, torch.Tensor):
-            idx = idx.cpu().numpy().tolist()  # Convert to list if it's a tensor.
+        num_rows = int(self.cfg.num_rows)
+        num_cols = self._grid_num_cols()
+
+        def _linear_index(row: int, col: int) -> int:
+            if self.cfg.curriculum:
+                # Stored in generation order: column outer, row inner.
+                return col * num_rows + row
+            return row * num_cols + col
+
+        if isinstance(row_ids, torch.Tensor) or isinstance(col_ids, torch.Tensor):
+            row_list = (
+                row_ids.cpu().numpy().tolist()
+                if isinstance(row_ids, torch.Tensor)
+                else [row_ids]
+            )
+            col_list = (
+                col_ids.cpu().numpy().tolist()
+                if isinstance(col_ids, torch.Tensor)
+                else [col_ids]
+            )
             return [
-                self._subterrain_specific_cfgs[i] if 0 <= i < len(self._subterrain_specific_cfgs) else None for i in idx
+                self._subterrain_specific_cfgs[_linear_index(int(row), int(col))]
+                if 0 <= _linear_index(int(row), int(col)) < len(self._subterrain_specific_cfgs)
+                else None
+                for row, col in zip(row_list, col_list)
             ]
-        if isinstance(idx, int):
-            return self._subterrain_specific_cfgs[idx] if 0 <= idx < len(self._subterrain_specific_cfgs) else None
+        idx = _linear_index(int(row_ids), int(col_ids))
+        if 0 <= idx < len(self._subterrain_specific_cfgs):
+            return self._subterrain_specific_cfgs[idx]
+        return None

@@ -12,6 +12,10 @@ from mjlab.utils.lab_api.math import quat_apply_inverse as quat_rotate_inverse
 from mjlab.utils.lab_api.math import wrap_to_pi, yaw_quat
 
 from instinct_mj.managers import CommandTerm
+from instinct_mj.tasks.parkour.mdp.rewards import (
+    _cref_all_stake_marker_centers,
+    cref_foothold_reward_visualizable,
+)
 from instinct_mj.terrains import TerrainImporter
 from instinct_mj.terrains.height_field.hf_terrains_cfg import (
     terrain_column_fixed_sequence_reset_patch_index,
@@ -61,52 +65,35 @@ def _cref_all_tread_marker_centers(
     return centers
 
 
-def _cref_all_stake_marker_centers(
-    origins: torch.Tensor,
-    stake_centers_xy: torch.Tensor,
-    stake_counts: torch.Tensor,
-    stake_z: torch.Tensor,
-    *,
-    z_offset: float = 0.15,
-) -> list[tuple[str, np.ndarray]]:
-    """Return marker centers for every valid plum-blossom stake in the terrain grid."""
-    origins_np = origins.detach().cpu().numpy()
-    stakes_xy_np = stake_centers_xy.detach().cpu().numpy()
-    counts_np = stake_counts.detach().cpu().numpy()
-    stake_z_np = stake_z.detach().cpu().numpy()
-
-    centers: list[tuple[str, np.ndarray]] = []
-    num_rows, num_cols = counts_np.shape
-    for row in range(num_rows):
-        for col in range(num_cols):
-            count = int(counts_np[row, col])
-            if count <= 0:
-                continue
-            origin = origins_np[row, col]
-            for stake_idx in range(count):
-                stake_xy = stakes_xy_np[row, col, stake_idx]
-                z_local = float(stake_z_np[row, col, stake_idx])
-                center = np.array(
-                    [
-                        origin[0] + stake_xy[0],
-                        origin[1] + stake_xy[1],
-                        origin[2] + z_local + z_offset,
-                    ],
-                    dtype=np.float64,
-                )
-                centers.append((f"cref_stake_{row}_{col}_{stake_idx}", center))
-    return centers
-
-
 def _cref_reward_term_from_manager(reward_manager: object | None, term_name: str) -> object | None:
+    if reward_manager is None:
+        return None
+    get_term_func = getattr(reward_manager, "get_term_func", None)
+    if callable(get_term_func):
+        func = get_term_func(term_name)
+        if func is not None:
+            return func
     get_term_cfg = getattr(reward_manager, "get_term_cfg", None)
     if not callable(get_term_cfg):
         return None
-    try:
-        term_cfg = get_term_cfg(term_name)
-    except (AttributeError, ValueError):
-        return None
-    return getattr(term_cfg, "func", None)
+
+    group_names: list[str | None] = ["rewards", None]
+    group_term_names = getattr(reward_manager, "_MultiRewardManager__group_term_names", None)
+    if isinstance(group_term_names, dict):
+        group_names = list(dict.fromkeys([*group_term_names.keys(), "rewards", None]))
+
+    for group_name in group_names:
+        try:
+            if group_name is None:
+                term_cfg = get_term_cfg(term_name)
+            else:
+                term_cfg = get_term_cfg(term_name, group_name=group_name)
+        except (AttributeError, ValueError, TypeError):
+            continue
+        func = getattr(term_cfg, "func", None)
+        if func is not None:
+            return func
+    return None
 
 
 class PoseVelocityCommand(CommandTerm):
@@ -812,7 +799,7 @@ class PoseVelocityCommand(CommandTerm):
                 getattr(self._env, "reward_manager", None),
                 self.cfg.cref_foothold_reward_name,
             )
-            if cref_reward_term is not None and bool(getattr(cref_reward_term, "_enabled", False)):
+            if cref_foothold_reward_visualizable(cref_reward_term):
                 origins_t = getattr(cref_reward_term, "terrain_origins", None)
                 stakes_xy_t = getattr(cref_reward_term, "stake_centers_xy_local", None)
                 stake_counts_t = getattr(cref_reward_term, "stake_counts", None)
@@ -971,7 +958,7 @@ class PoseVelocityCommand(CommandTerm):
             # 4b. CReF-style foothold candidates from the stateful reward term.
             if self.cfg.show_cref_foothold_candidates:
                 reward_term = cref_reward_term
-                if reward_term is not None and bool(getattr(reward_term, "_enabled", False)):
+                if cref_foothold_reward_visualizable(reward_term):
                     terrain_level = int(self.terrain.terrain_levels[batch].item())
                     terrain_type = int(self.terrain.terrain_types[batch].item())
                     origins_t = getattr(reward_term, "terrain_origins", None)
