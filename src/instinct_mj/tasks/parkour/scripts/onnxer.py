@@ -79,7 +79,8 @@ def export_parkour_onnx_model(*, runner, obs: torch.Tensor, export_dir: str) -> 
                 "input": {0: "batch"},
                 "output": {0: "batch"},
             },
-            opset_version=17,
+            opset_version=18,
+            dynamo=False,
             external_data=False,  # 单文件导出，不生成 .onnx.data
         )
     return str(export_path)

@@ -64,3 +64,49 @@ def test_command_remains_stopped_after_target_radius_is_crossed() -> None:
   command._update_command()
 
   assert torch.allclose(command.vel_command_b, torch.zeros_like(command.vel_command_b))
+
+
+def test_target_reached_clears_when_flat_patch_advances() -> None:
+  command = PoseVelocityCommand.__new__(PoseVelocityCommand)
+  command._env = SimpleNamespace(num_envs=1, device="cpu", step_dt=0.02, max_episode_length=1000)
+  command.cfg = SimpleNamespace(
+    flat_patch_advance_on_arrival=True,
+    flat_patch_arrival_xy_dist=0.4,
+    flat_patch_arrival_hold_steps=1,
+    flat_patch_resample_velocity_on_advance=False,
+    guided_resample_velocity_on_advance=False,
+    rel_standing_envs=0.0,
+  )
+  command.device = "cpu"
+  command.num_envs = 1
+  command._target_reached = torch.ones(1, dtype=torch.bool)
+  command._flat_patch_idx = torch.zeros(1, dtype=torch.long)
+  command._flat_patch_arrival_hold = torch.ones(1, dtype=torch.long)
+  command._flat_patch_seq_terminal = torch.zeros(1, dtype=torch.bool)
+  command.pos_command_w = torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float32)
+  command.valid_targets = torch.tensor([[[[0.0, 0.0, 0.0], [3.7, 0.0, 0.0]]]], dtype=torch.float32)
+  command._flat_patch_target_fixed_sequence_by_col = torch.ones(1, dtype=torch.bool)
+  command._flat_patch_reset_index_by_col = torch.zeros(1, dtype=torch.long)
+  command._flat_patch_num_valid = None
+  command._guided_mode = False
+  command._guided_counts = None
+  command.robot = SimpleNamespace(
+    data=SimpleNamespace(
+      root_link_pos_w=torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float32),
+    )
+  )
+  command.terrain = SimpleNamespace(
+    terrain_levels=torch.zeros(1, dtype=torch.long),
+    terrain_types=torch.zeros(1, dtype=torch.long),
+  )
+  command.lin_vel_x_range = torch.tensor([[0.3, 1.0]], dtype=torch.float32)
+  command.lin_vel_y_range = torch.tensor([[0.0, 0.0]], dtype=torch.float32)
+  command.ang_vel_z_range = torch.tensor([[-0.5, 0.5]], dtype=torch.float32)
+  command.random_velocity_indices = torch.zeros(1, dtype=torch.bool)
+  command.is_standing_env = torch.zeros(1, dtype=torch.bool)
+
+  command._maybe_advance_flat_patch_by_arrival()
+
+  assert not command._target_reached.item()
+  assert command._flat_patch_idx.item() == 1
+  assert torch.allclose(command.pos_command_w[0], torch.tensor([3.7, 0.0, 0.0]))

@@ -4,3 +4,4 @@ selected_files:
   - walk_run_retargeted.npz
   - walk_slope_retargeted.npz
   - run_slope_retargeted.npz
+  - rotate_retargeted.npz

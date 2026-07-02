@@ -7,50 +7,16 @@ from typing import Any
 
 from instinct_mj.rl import (
     EncoderTerrainActorCriticCfg,
+    EncoderTerrainVelActorCriticCfg,
     EstimatorWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
     InstinctRlEncoderMoEActorCriticCfg,
     InstinctRlNormalizerCfg,
     InstinctRlOnPolicyRunnerCfg,
-    InstinctRlPerceptiveEncoderCfg,
     InstinctRlPpoAlgorithmCfg,
 )
 from instinct_mj.tasks.config.rl_utils import default_policy_critic_normalizers
-
-
-_ADAM_LITE_DYNAMICS_COMPONENTS = [
-    "base_ang_vel",
-    "projected_gravity",
-    "velocity_commands",
-    "joint_pos",
-    "joint_vel",
-    "actions",
-]
-
-
-def _default_perceptive_encoder_cfg() -> InstinctRlPerceptiveEncoderCfg:
-    return InstinctRlPerceptiveEncoderCfg(
-        depth_component_names=["depth_image"],
-        dynamics_component_names=list(_ADAM_LITE_DYNAMICS_COMPONENTS),
-        depth_channels=[32, 64],
-        depth_kernel_sizes=[3, 3],
-        depth_strides=[2, 2],
-        depth_paddings=[1, 1],
-        film_hidden_dim=64,
-        terrain_mlp_hidden=[128],
-        dynamics_mlp_hidden=[256, 128],
-        output_size=256,
-        nonlinearity="ReLU",
-        takeout_input_components=True,
-    )
-
-
-def _default_perceptive_encoder_configs() -> dict[str, Any]:
-    return {
-        "class_name": "PerceptiveEncoder",
-        "perceptive_encoder": _default_perceptive_encoder_cfg(),
-    }
 
 
 @dataclass(kw_only=True)
@@ -81,12 +47,45 @@ class PolicyCfg(EncoderTerrainActorCriticCfg):
     actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     activation: str = "elu"
-    encoder_configs: dict[str, Any] | None = field(default_factory=_default_perceptive_encoder_configs)
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
     # Critic consumes the privileged heightmap directly, so it needs no depth encoder.
     critic_encoder_configs: dict[str, Any] | str | None = None
     estimator_target_components: list[str] = field(default_factory=lambda: ["height_map_priv"])
-    terrain_latent_component: str = "parallel_latent_0_perceptive"
+    terrain_latent_component: str = "parallel_latent_0_depth_encoder"
     terrain_predictor_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [256, 128], "nonlinearity": "ReLU"}
+    )
+
+
+@dataclass(kw_only=True)
+class VelEstPolicyCfg(EncoderTerrainVelActorCriticCfg):
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = None
+    estimator_target_components: list[str] = field(default_factory=lambda: ["height_map_priv"])
+    terrain_latent_component: str = "parallel_latent_0_depth_encoder"
+    terrain_predictor_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [256, 128], "nonlinearity": "ReLU"}
+    )
+    vel_estimator_obs_components: list[str] = field(
+        default_factory=lambda: [
+            "base_ang_vel",
+            "projected_gravity",
+            "velocity_commands",
+            "joint_pos",
+            "joint_vel",
+            "actions",
+        ]
+    )
+    vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel"])
+    vel_estimator_configs: dict[str, Any] = field(
         default_factory=lambda: {"hidden_sizes": [256, 128], "nonlinearity": "ReLU"}
     )
 
@@ -202,3 +201,14 @@ class AdamLitePlumBlossomParkourVisionAmpRunnerCfg(AdamSPParkourVisionAmpRunnerC
 def adam_lite_plum_blossom_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """AMP runner for plum-blossom stepping-stakes parkour."""
     return AdamLitePlumBlossomParkourVisionAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteParkourVelEstAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_parkour_velest"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: VelEstPolicyCfg())
+
+
+def adam_lite_parkour_velest_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """AMP runner with a HIMLoco-style base-velocity estimator injected into the actor."""
+    return AdamLiteParkourVelEstAmpRunnerCfg()

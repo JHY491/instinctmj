@@ -605,6 +605,23 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
                 "vel_threshold": 0.15,
             },
         ),
+        "yaw_cmd_double_support": RewardTermCfg(
+            func=parkour_mdp.yaw_cmd_double_support,
+            weight=-1.0,
+            params={
+                "command_name": "base_velocity",
+                "sensor_name": "contact_forces",
+                "yaw_threshold": 0.1,
+                "grace_period": 0.08,
+                "max_penalty_time": 0.4,
+                "random_velocity_only": False,
+            },
+        ),
+        "both_feet_air_time": RewardTermCfg(
+            func=parkour_mdp.both_feet_air_time,
+            weight=-1.0,
+            params={"sensor_name": "contact_forces"},
+        ),
         "feet_slide": RewardTermCfg(
             func=parkour_mdp.feet_slide,
             weight=-0.4,
@@ -615,6 +632,8 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
                 ),
                 "threshold": 1.0,
+                "command_name": "base_velocity",
+                "yaw_threshold": 0.1,
             },
         ),
         # "joint_deviation_hip": RewardTermCfg(
@@ -687,6 +706,7 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
+                "yaw_cmd_threshold": 0.10,
             },
         ),
         "feet_at_plane": RewardTermCfg(

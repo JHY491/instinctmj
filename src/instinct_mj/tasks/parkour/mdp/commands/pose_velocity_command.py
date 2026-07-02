@@ -512,6 +512,8 @@ class PoseVelocityCommand(CommandTerm):
         new_i = self._flat_patch_idx[env_ids]
         self.pos_command_w[env_ids] = self.valid_targets[levels, tts, new_i]
         self._flat_patch_arrival_hold[env_ids] = 0
+        # Latched ``_target_reached`` zeros velocity until resample; clear it so the next patch gets a command.
+        self._target_reached[env_ids] = False
 
         if self.cfg.flat_patch_resample_velocity_on_advance:
             self._resample_velocity_internal([int(i) for i in env_ids.tolist()])
@@ -594,6 +596,7 @@ class PoseVelocityCommand(CommandTerm):
         self._guided_wp_idx[env_ids] = new_idx
         self.pos_command_w[env_ids] = self._guided_world[levels, cols, new_idx]
         self._guided_arrival_hold[env_ids] = 0
+        self._target_reached[env_ids] = False
 
         if self.cfg.guided_resample_velocity_on_advance:
             self._resample_velocity_internal([int(i) for i in env_ids.tolist()])

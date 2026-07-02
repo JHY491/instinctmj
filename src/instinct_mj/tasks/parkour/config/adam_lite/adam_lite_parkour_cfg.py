@@ -559,14 +559,25 @@ def instinct_adam_lite_parkour_env_cfg(
         "track_ang_vel_z_exp": RewardTermCfg(
             func=parkour_mdp.track_ang_vel_z_exp,
             weight=2.0,
-            params={"command_name": "base_velocity", "std": 0.35},
+            params={"command_name": "base_velocity", "std": 0.5},
         ),
         "ang_vel_z_overshoot": RewardTermCfg(
             func=parkour_mdp.ang_vel_z_overshoot,
             weight=-1.0,
             params={
                 "command_name": "base_velocity",
-                "ang_vel_tolerance": 0.1,
+                "ang_vel_tolerance": 0.15,
+            },
+        ),
+        "ang_vel_z_stand_spin_band": RewardTermCfg(
+            func=parkour_mdp.ang_vel_z_random_velocity_band,
+            weight=0.5,
+            params={
+                "command_name": "base_velocity",
+                "cmd_epsilon": 0.1,
+                "slow_tolerance": 0.2,
+                "fast_tolerance": 0.25,
+                "std": 0.25,
             },
         ),
         "heading_error": RewardTermCfg(
@@ -617,15 +628,20 @@ def instinct_adam_lite_parkour_env_cfg(
         ),
         "yaw_cmd_double_support": RewardTermCfg(
             func=parkour_mdp.yaw_cmd_double_support,
-            weight=-1.2,
+            weight=-1.0,
             params={
                 "command_name": "base_velocity",
                 "sensor_name": "contact_forces",
-                "yaw_threshold": 0.15,
+                "yaw_threshold": 0.1,
                 "grace_period": 0.08,
                 "max_penalty_time": 0.4,
                 "random_velocity_only": False,
             },
+        ),
+        "both_feet_air_time": RewardTermCfg(
+            func=parkour_mdp.both_feet_air_time,
+            weight=-1.0,
+            params={"sensor_name": "contact_forces"},
         ),
         # Reserved for stair tuning; not active in baseline training (see 7f15824 reward set).
         # "feet_horizontal_impact": RewardTermCfg(
@@ -663,6 +679,8 @@ def instinct_adam_lite_parkour_env_cfg(
                     body_names=("left_ankle_roll_link", "right_ankle_roll_link"),
                 ),
                 "threshold": 1.0,
+                "command_name": "base_velocity",
+                "yaw_threshold": 0.1,
             },
         ),
         # "joint_deviation_hip": RewardTermCfg(
@@ -1023,4 +1041,23 @@ def instinct_adam_lite_parkour_final_cfg(
         cfg.viewer.origin_type = ViewerConfig.OriginType.WORLD
         cfg.viewer.entity_name = None
         cfg.viewer.body_name = None
+    return cfg
+
+
+def instinct_adam_lite_parkour_velest_final_cfg(
+    *,
+    play: bool = False,
+) -> ManagerBasedRlEnvCfg:
+    """Parkour variant that exposes base_lin_vel in the policy obs group.
+
+    The velocity estimator injects its proprioception-derived estimate into this slot, so the
+    actor consumes an explicit (deploy-consistent) base velocity feature.
+    """
+    cfg = instinct_adam_lite_parkour_final_cfg(play=play)
+    cfg.observations["policy"].terms["base_lin_vel"] = ObservationTermCfg(
+        func=envs_mdp.base_lin_vel,
+        history_length=8,
+        flatten_history_dim=True,
+        noise=None,
+    )
     return cfg

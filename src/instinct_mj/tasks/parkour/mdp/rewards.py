@@ -371,29 +371,15 @@ def yaw_cmd_double_support(
 def both_feet_air_time(
     env: ManagerBasedRlEnv,
     sensor_name: str,
-    grace_period: float = 0.0,       # 任何腾空时间都会产生惩罚
-    max_penalty_time: float = 0.2,
 ) -> torch.Tensor:
-    """Penalize simultaneous flight time to discourage two-foot hopping.
-    
-    Now penalizes ANY time both feet are off the ground, regardless of command velocity.
-    """
+    """Penalize two-foot flight to discourage hopping during in-place spins."""
     contact_sensor: ContactSensor = env.scene[sensor_name]
-    air_time = contact_sensor.data.current_air_time
     contact_time = contact_sensor.data.current_contact_time
-    
-    assert air_time is not None
     assert contact_time is not None
 
-    # 判断是否双足都未接触地面 (in_contact 为 False)
     in_contact = contact_time > 0.0
     both_feet_air = torch.sum(in_contact.int(), dim=1) == 0
-    
-    
     return both_feet_air.float()
-
-
-    
 
 
 def feet_slide(
@@ -401,15 +387,30 @@ def feet_slide(
     sensor_name: str,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     threshold: float = 1.0,
+    command_name: str | None = None,
+    yaw_threshold: float = 0.1,
 ) -> torch.Tensor:
-    """Penalize foot sliding speed while feet are in contact."""
+    """Penalize foot sliding speed while feet are in contact.
+
+    When ``command_name`` is set and |ωz_cmd| exceeds ``yaw_threshold``, also penalize
+    world-frame yaw spin of grounded feet (pivoting without stepping).
+    """
     asset: Entity = env.scene[asset_cfg.name]
     sensor: ContactSensor = env.scene[sensor_name]
 
     in_contact = torch.max(torch.linalg.vector_norm(sensor.data.force_history, dim=-1), dim=2)[0] > threshold
+    in_contact_f = in_contact.float()
     foot_vel_xy = asset.data.body_link_lin_vel_w[:, asset_cfg.body_ids, :2]
     slip_speed = torch.norm(foot_vel_xy, dim=-1)
-    return torch.sum(slip_speed * in_contact.float(), dim=1)
+    penalty = torch.sum(slip_speed * in_contact_f, dim=1)
+
+    if command_name is not None:
+        cmd = env.command_manager.get_command(command_name)
+        yaw_active = (torch.abs(cmd[:, 2]) > yaw_threshold).float()
+        foot_yaw_spin = torch.abs(asset.data.body_link_ang_vel_w[:, asset_cfg.body_ids, 2])
+        penalty = penalty + torch.sum(foot_yaw_spin * in_contact_f, dim=1) * yaw_active
+
+    return penalty
 
 
 def ang_vel_xy_l2(
