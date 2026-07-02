@@ -143,8 +143,11 @@ class AmpAlgoCfg(EstimatorWasabiPpoAlgorithmCfg):
 
 
 @dataclass(kw_only=True)
-class FootholdAmpAlgoCfg(FootholdWasabiPpoAlgorithmCfg, AmpAlgoCfg):
-    """AMP（判别器 reward + estimator）+ foothold guidance。字段取二者并集，class_name 用 Foothold 版。"""
+class FootholdAmpAlgoCfg(AmpAlgoCfg, FootholdWasabiPpoAlgorithmCfg):
+    """AMP（判别器 reward + estimator）+ foothold guidance。字段取二者并集，class_name 用 Foothold 版。
+
+    AmpAlgoCfg 须在前：dataclass MRO 以先出现的父类字段为准，否则 discriminator_kwargs 等 AMP 字段会落回 None。
+    """
 
     class_name: str = "FootholdWasabiEstimatorPPO"
 
