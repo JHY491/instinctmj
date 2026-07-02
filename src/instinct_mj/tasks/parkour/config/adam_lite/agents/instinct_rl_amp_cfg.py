@@ -212,3 +212,14 @@ class AdamLiteParkourVelEstAmpRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 def adam_lite_parkour_velest_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """AMP runner with a HIMLoco-style base-velocity estimator injected into the actor."""
     return AdamLiteParkourVelEstAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_parkour"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: VelEstPolicyCfg())
+
+
+def adam_lite_foothold_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold 任务 runner（Task 6 会把 algorithm 换成 FootholdAmpAlgoCfg）。"""
+    return AdamLiteFootholdParkourRunnerCfg()
