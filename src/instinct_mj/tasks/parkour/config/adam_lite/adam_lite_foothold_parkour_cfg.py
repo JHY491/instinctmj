@@ -5,7 +5,7 @@ from __future__ import annotations
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
 import mjlab.envs.mdp as envs_mdp
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.managers import ObservationGroupCfg, ObservationTermCfg, SceneEntityCfg
+from mjlab.managers import ObservationGroupCfg, ObservationTermCfg, RewardTermCfg, SceneEntityCfg
 from mjlab.sensor import GridPatternCfg, ObjRef, RayCastSensorCfg
 from mjlab.viewer.viewer_config import ViewerConfig
 
@@ -92,6 +92,18 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
         history_length=1,
         flatten_history_dim=True,
     )
+
+    # foothold guidance 取代非学习的 CReF 落脚点引导：移除 cref reward，避免两套引导冲突
+    cfg.rewards.pop("cref_stair_foothold", None)
+
+    # 拆成两个 reward 组 -> num_rewards=2 -> 第二个 critic 专门估计 r^f 的价值（SSR 对齐）
+    task_rewards = dict(cfg.rewards)
+    cfg.rewards = {
+        "task": task_rewards,
+        "foothold": {
+            "foothold_anchor": RewardTermCfg(func=envs_mdp.is_alive, weight=0.0),
+        },
+    }
 
     return cfg
 

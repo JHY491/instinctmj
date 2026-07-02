@@ -150,6 +150,8 @@ class FootholdAmpAlgoCfg(AmpAlgoCfg, FootholdWasabiPpoAlgorithmCfg):
     """
 
     class_name: str = "FootholdWasabiEstimatorPPO"
+    advantage_mixing_weights: tuple[float, ...] = (1.0, 0.25)              # (task, foothold)
+    auxiliary_reward_per_env_reward_coefs: tuple[float, ...] = (0.0, 1.0)  # 所有 aux reward(判别器+foothold) 进第二组
 
 
 @dataclass(kw_only=True)
