@@ -618,21 +618,14 @@ def feet_heading_alignment(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     cmd_threshold: float = 0.15,
     angle_scale: float = 0.10,
-    yaw_cmd_threshold: float = 0.15,
 ) -> torch.Tensor:
-    """Reward foot heading alignment with an angle-sensitive exponential shaping.
-
-    Active under a linear command (walking) or a yaw command (in-place turning). The
-    target is always the base forward direction, so during a turn the feet are pulled to
-    rotate with the base instead of splaying out (hip-yaw toe-out) to pivot in place.
-    """
+    """Reward foot heading alignment with an angle-sensitive exponential shaping."""
     asset: Entity = env.scene[asset_cfg.name]
     command_b = env.command_manager.get_command(command_name)
     assert command_b is not None
     command_xy_b = command_b[:, :2]
     command_norm = torch.linalg.vector_norm(command_xy_b, dim=-1)
-    yaw_cmd_abs = torch.abs(command_b[:, 2])
-    is_active = (command_norm > cmd_threshold) | (yaw_cmd_abs > yaw_cmd_threshold)
+    is_active = command_norm > cmd_threshold
 
     desired_dir_b = torch.zeros(env.num_envs, 3, device=command_b.device, dtype=command_b.dtype)
     desired_dir_b[:, 0] = 1.0

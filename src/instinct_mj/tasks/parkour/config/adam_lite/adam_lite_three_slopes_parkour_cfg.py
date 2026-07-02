@@ -706,7 +706,6 @@ def instinct_adam_lite_three_slopes_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
-                "yaw_cmd_threshold": 0.10,
             },
         ),
         "feet_at_plane": RewardTermCfg(

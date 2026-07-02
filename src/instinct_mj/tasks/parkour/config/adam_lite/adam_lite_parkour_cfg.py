@@ -753,9 +753,6 @@ def instinct_adam_lite_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
-                # In-place yaw turns have zero linear command; keep feet aligned to base
-                # forward so the robot steps to turn instead of splaying hip-yaw to pivot.
-                "yaw_cmd_threshold": 0.10,
             },
         ),
         "feet_at_plane": RewardTermCfg(
@@ -1048,16 +1045,22 @@ def instinct_adam_lite_parkour_velest_final_cfg(
     *,
     play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-    """Parkour variant that exposes base_lin_vel in the policy obs group.
+    """Parkour variant that exposes current base_lin_vel in the policy obs group.
 
-    The velocity estimator injects its proprioception-derived estimate into this slot, so the
-    actor consumes an explicit (deploy-consistent) base velocity feature.
+    The velocity estimator predicts a single 3-dim body-frame linear velocity from proprio
+    history and injects it here (HIMLoco-style). Critic uses the same single-frame target
+    for estimator supervision.
     """
     cfg = instinct_adam_lite_parkour_final_cfg(play=play)
     cfg.observations["policy"].terms["base_lin_vel"] = ObservationTermCfg(
         func=envs_mdp.base_lin_vel,
-        history_length=8,
+        history_length=1,
         flatten_history_dim=True,
         noise=None,
+    )
+    cfg.observations["critic"].terms["base_lin_vel"] = ObservationTermCfg(
+        func=envs_mdp.base_lin_vel,
+        history_length=1,
+        flatten_history_dim=True,
     )
     return cfg
