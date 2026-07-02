@@ -43,11 +43,11 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
 
     foothold_terms = {
         "foot_region_scan_l": ObservationTermCfg(
-            func=envs_mdp.height_scan,
+            func=parkour_mdp.foot_region_hit_z,
             params={"sensor_name": "left_foot_region_scanner"},
         ),
         "foot_region_scan_r": ObservationTermCfg(
-            func=envs_mdp.height_scan,
+            func=parkour_mdp.foot_region_hit_z,
             params={"sensor_name": "right_foot_region_scanner"},
         ),
         "foot_contact": ObservationTermCfg(

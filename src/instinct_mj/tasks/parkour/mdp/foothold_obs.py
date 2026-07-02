@@ -69,3 +69,17 @@ def terrain_level(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = SceneEntit
     del asset_cfg
     level = env.scene.terrain.terrain_levels
     return level.unsqueeze(-1).float()
+
+
+def foot_region_hit_z(env: ManagerBasedRlEnv, sensor_name: str, miss_value: float = -10.0) -> torch.Tensor:
+    """区域扫描每条 ray 命中点的世界绝对高度 z，(N, num_rays)。
+
+    与 height_scan（返回相对下方距离）不同：ρ 数学需要绝对高度。miss（无命中）用极低值，
+    视作深坑=无支撑。
+    """
+    from mjlab.sensor import RayCastSensor
+
+    sensor: RayCastSensor = env.scene[sensor_name]
+    z = sensor.data.hit_pos_w[..., 2]
+    miss = sensor.data.distances < 0
+    return torch.where(miss, torch.full_like(z, miss_value), z)
