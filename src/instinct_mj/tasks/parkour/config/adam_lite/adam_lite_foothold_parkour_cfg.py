@@ -81,6 +81,18 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
         enable_corruption=False,
     )
 
+    cfg.observations["policy"].terms["base_lin_vel"] = ObservationTermCfg(
+        func=envs_mdp.base_lin_vel,
+        history_length=1,
+        flatten_history_dim=True,
+        noise=None,
+    )
+    cfg.observations["critic"].terms["base_lin_vel"] = ObservationTermCfg(
+        func=envs_mdp.base_lin_vel,
+        history_length=1,
+        flatten_history_dim=True,
+    )
+
     return cfg
 
 
