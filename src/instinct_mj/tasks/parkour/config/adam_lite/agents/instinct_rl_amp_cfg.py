@@ -9,6 +9,7 @@ from instinct_mj.rl import (
     EncoderTerrainActorCriticCfg,
     EncoderTerrainVelActorCriticCfg,
     EstimatorWasabiPpoAlgorithmCfg,
+    FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
     InstinctRlEncoderMoEActorCriticCfg,
@@ -142,6 +143,13 @@ class AmpAlgoCfg(EstimatorWasabiPpoAlgorithmCfg):
 
 
 @dataclass(kw_only=True)
+class FootholdAmpAlgoCfg(FootholdWasabiPpoAlgorithmCfg, AmpAlgoCfg):
+    """AMP（判别器 reward + estimator）+ foothold guidance。字段取二者并集，class_name 用 Foothold 版。"""
+
+    class_name: str = "FootholdWasabiEstimatorPPO"
+
+
+@dataclass(kw_only=True)
 class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     num_steps_per_env: int = 24
     policy_observation_group: str = "policy"
@@ -218,8 +226,9 @@ def adam_lite_parkour_velest_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
 class AdamLiteFootholdParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
     experiment_name: str = "adam_lite_foothold_parkour"
     policy: InstinctRlActorCriticCfg = field(default_factory=lambda: VelEstPolicyCfg())
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdAmpAlgoCfg())
 
 
 def adam_lite_foothold_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """Foothold 任务 runner（Task 6 会把 algorithm 换成 FootholdAmpAlgoCfg）。"""
+    """Foothold 任务 runner（algorithm=FootholdAmpAlgoCfg）。"""
     return AdamLiteFootholdParkourRunnerCfg()

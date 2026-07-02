@@ -27,6 +27,14 @@ def foot_pos_b(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     return torch.cat(out, dim=-1)
 
 
+def foot_sole_z(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg, foot_height_offset: float = 0.065) -> torch.Tensor:
+    """两脚鞋底平面世界高度 (N,2)=[left,right]，与 feet_unsupported 一致。"""
+    asset: Entity = env.scene[asset_cfg.name]
+    ids = _foot_ids(asset_cfg)
+    z = torch.stack([asset.data.body_link_pos_w[:, i, 2] for i in ids], dim=-1)
+    return z - foot_height_offset
+
+
 def foot_vel_b(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """两脚线速度在 base 系 xy，(N,4)。"""
     asset: Entity = env.scene[asset_cfg.name]

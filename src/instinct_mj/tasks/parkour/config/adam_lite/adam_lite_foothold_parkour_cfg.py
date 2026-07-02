@@ -58,6 +58,10 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
             func=parkour_mdp.foot_pos_b,
             params={"asset_cfg": ankle},
         ),
+        "foot_sole_z": ObservationTermCfg(
+            func=parkour_mdp.foot_sole_z,
+            params={"asset_cfg": ankle},
+        ),
         "foot_vel_b": ObservationTermCfg(
             func=parkour_mdp.foot_vel_b,
             params={"asset_cfg": ankle},

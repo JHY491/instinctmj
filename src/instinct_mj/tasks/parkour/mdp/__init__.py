@@ -8,6 +8,7 @@ from .foothold_obs import (
     foot_pos_b,
     foot_pos_w_xy,
     foot_region_hit_z,
+    foot_sole_z,
     foot_vel_b,
     terrain_level,
 )

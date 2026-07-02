@@ -240,3 +240,21 @@ class EstimatorWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
     target_from_critic: bool = True
     estimator_loss_func: str = "mse_loss"
     estimator_loss_kwargs: dict[str, Any] | None = None
+
+
+@dataclass
+class FootholdWasabiPpoAlgorithmCfg(EstimatorWasabiPpoAlgorithmCfg):
+    """EstimatorWasabiPPO + SSR imagined foothold guidance。"""
+
+    class_name: str = "FootholdWasabiEstimatorPPO"
+    foothold_state_key: str = "foothold"
+    region_grid: tuple[int, int] = (13, 21)
+    region_res: float = 0.025
+    sole_grid: tuple[int, int] = (5, 10)
+    epsilon_h: float = 0.03
+    sigma_f: float = 0.0625
+    num_swing_samples: int = 8
+    terrain_level_gate: int = 5
+    imagination_hidden_sizes: tuple[int, ...] = (256, 128)
+    imagination_lr: float = 5.0e-4
+    foothold_reward_coef: float = 0.25
