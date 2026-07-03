@@ -21,6 +21,15 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
     cfg = instinct_adam_lite_parkour_env_cfg(play=play)
     setattr(cfg, "run_name", "AdamLiteFoothold")
     cfg.observations["policy"].terms["depth_image"].params["num_output_frames"] = 10
+    depth_params = cfg.observations["policy"].terms["depth_image"].params
+    depth_history_length = (
+        (depth_params["num_output_frames"] - 1) * depth_params["history_skip_frames"]
+        + 1
+        + depth_params["delayed_frame_ranges"][1]
+    )
+    for sensor_cfg in cfg.scene.sensors:
+        if sensor_cfg.name == "camera":
+            sensor_cfg.data_histories["distance_to_image_plane_noised"] = depth_history_length
     cfg.observations["critic"].terms = {
         term_name: term_cfg
         for term_name, term_cfg in cfg.observations["critic"].terms.items()
