@@ -58,6 +58,8 @@ class InstinctRlPpoAlgorithmCfg:
     gamma: float = 0.99
     lam: float = 0.95
     advantage_mixing_weights: float | tuple[float, ...] = 1.0
+    auxiliary_reward_per_env_reward_coefs: tuple[float, ...] = ()
+    auxiliary_reward_per_env_reward_coefs_by_key: dict[str, tuple[float, ...]] | None = None
     desired_kl: float = 0.01
     max_grad_norm: float = 1.0
     clip_min_std: float = 1.0e-12
@@ -243,10 +245,10 @@ class EstimatorWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
 
 
 @dataclass
-class FootholdWasabiPpoAlgorithmCfg(EstimatorWasabiPpoAlgorithmCfg):
-    """EstimatorWasabiPPO + SSR imagined foothold guidance。"""
+class FootholdWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
+    """WasabiPPO + SSR imagined foothold guidance."""
 
-    class_name: str = "FootholdWasabiEstimatorPPO"
+    class_name: str = "FootholdWasabiPPO"
     foothold_state_key: str = "foothold"
     region_grid: tuple[int, int] = (13, 21)
     region_res: float = 0.025

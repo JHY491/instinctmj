@@ -380,6 +380,32 @@ def _build_parkour_onnx_policy(
     )
 
 
+def _wrap_foothold_imagination_visualization(policy, runner, vec_env: InstinctRlVecEnvWrapper):
+    alg = getattr(runner, "alg", None)
+    build_payload = getattr(alg, "compute_foothold_imagination_visualization", None)
+    if build_payload is None:
+        return policy
+
+    warned = False
+
+    def wrapped_policy(obs: torch.Tensor) -> torch.Tensor:
+        nonlocal warned
+        extras = getattr(vec_env, "latest_extras", {})
+        obs_pack = extras.get("observations") if isinstance(extras, dict) else None
+        if isinstance(obs_pack, dict):
+            with torch.no_grad():
+                try:
+                    payload = build_payload(obs_pack)
+                    setattr(vec_env.unwrapped, "_instinct_foothold_imagination_vis", payload)
+                except Exception as exc:
+                    if not warned:
+                        print(f"[WARN] Foothold imagination visualization disabled: {exc}")
+                        warned = True
+        return policy(obs)
+
+    return wrapped_policy
+
+
 def _export_policy_to_onnx(
     *,
     runner,
@@ -566,6 +592,7 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
             if runner is None:
                 raise RuntimeError("Runner is not initialized.")
             policy = runner.get_inference_policy(device=device)
+            policy = _wrap_foothold_imagination_visualization(policy, runner, vec_env)
 
     rollout_steps = _resolve_rollout_steps(cfg)
 

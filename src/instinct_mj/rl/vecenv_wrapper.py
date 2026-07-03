@@ -38,6 +38,7 @@ class InstinctRlVecEnvWrapper(VecEnv):
         self.num_rewards = int(getattr(self.unwrapped, "num_rewards", 1))
         self.num_obs = self._group_flat_dim(self.policy_group)
         self.num_critic_obs = self._group_flat_dim(self.critic_group) if self.critic_group is not None else None
+        self.latest_extras: dict = {}
 
         # Reset once because instinct_rl runner does not call reset before rollout.
         self.env.reset()
@@ -118,7 +119,9 @@ class InstinctRlVecEnvWrapper(VecEnv):
     def get_observations(self) -> tuple[torch.Tensor, dict]:
         obs_dict = self.unwrapped.observation_manager.compute()
         packed_obs = self._pack_observations(obs_dict)
-        return packed_obs["policy"], {"observations": packed_obs}
+        extras = {"observations": packed_obs}
+        self._record_latest_extras(extras)
+        return packed_obs["policy"], extras
 
     def reset(self) -> tuple[torch.Tensor, dict]:
         obs_dict, extras = self.env.reset()
@@ -128,6 +131,7 @@ class InstinctRlVecEnvWrapper(VecEnv):
         extras.setdefault("step", {})
         extras.setdefault("episode", {})
         extras["observations"] = packed_obs
+        self._record_latest_extras(extras)
         return packed_obs["policy"], extras
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
@@ -148,6 +152,7 @@ class InstinctRlVecEnvWrapper(VecEnv):
             rewards = torch.stack(list(rewards.values()), dim=-1)
         if rewards.ndim == 1:
             rewards = rewards.unsqueeze(1)
+        self._record_latest_extras(extras)
         return packed_obs["policy"], rewards, dones, extras
 
     def close(self) -> None:
@@ -165,6 +170,10 @@ class InstinctRlVecEnvWrapper(VecEnv):
         for key, default_value in self._log_defaults.items():
             stable_log.setdefault(key, default_value)
         extras["log"] = stable_log
+
+    def _record_latest_extras(self, extras: dict) -> None:
+        self.latest_extras = extras
+        setattr(self.unwrapped, "_instinct_rl_latest_extras", extras)
 
     def _make_zero_like(self, value: object) -> torch.Tensor:
         if isinstance(value, torch.Tensor):

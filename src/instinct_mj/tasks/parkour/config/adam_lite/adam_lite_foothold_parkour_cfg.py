@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
 import mjlab.envs.mdp as envs_mdp
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -18,6 +20,13 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
     """楼梯 env + foothold 传感器/观测组。"""
     cfg = instinct_adam_lite_parkour_env_cfg(play=play)
     setattr(cfg, "run_name", "AdamLiteFoothold")
+    cfg.observations["policy"].terms["depth_image"].params["num_output_frames"] = 10
+    cfg.observations["critic"].terms = {
+        term_name: term_cfg
+        for term_name, term_cfg in cfg.observations["critic"].terms.items()
+        if term_name != "height_map_priv"
+    }
+    cfg.observations["critic"].terms["depth_image"] = copy.deepcopy(cfg.observations["policy"].terms["depth_image"])
 
     ankle = SceneEntityCfg("robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link"))
 
@@ -80,28 +89,40 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
         concatenate_terms=False,
         enable_corruption=False,
     )
-
-    cfg.observations["policy"].terms["base_lin_vel"] = ObservationTermCfg(
-        func=envs_mdp.base_lin_vel,
-        history_length=1,
-        flatten_history_dim=True,
-        noise=None,
+    cfg.observations["critic"].terms.update(
+        {
+            "foot_contact": ObservationTermCfg(
+                func=parkour_mdp.foot_contact,
+                params={"sensor_name": "contact_forces"},
+            ),
+            "foot_pos_b": ObservationTermCfg(
+                func=parkour_mdp.foot_pos_b,
+                params={"asset_cfg": ankle},
+            ),
+            "foot_sole_z": ObservationTermCfg(
+                func=parkour_mdp.foot_sole_z,
+                params={"asset_cfg": ankle},
+            ),
+            "foot_vel_b": ObservationTermCfg(
+                func=parkour_mdp.foot_vel_b,
+                params={"asset_cfg": ankle},
+            ),
+        }
     )
-    cfg.observations["critic"].terms["base_lin_vel"] = ObservationTermCfg(
-        func=envs_mdp.base_lin_vel,
-        history_length=1,
-        flatten_history_dim=True,
-    )
 
-    # foothold guidance 取代非学习的 CReF 落脚点引导：移除 cref reward，避免两套引导冲突
-    cfg.rewards.pop("cref_stair_foothold", None)
-
-    # 拆成两个 reward 组 -> num_rewards=2 -> 第二个 critic 专门估计 r^f 的价值（SSR 对齐）
-    task_rewards = dict(cfg.rewards)
+    # Three reward groups match SSR: locomotion task, foothold guidance, and AMP style.
+    task_rewards = {
+        reward_name: reward_cfg
+        for reward_name, reward_cfg in cfg.rewards.items()
+        if reward_name != "cref_stair_foothold"
+    }
     cfg.rewards = {
         "task": task_rewards,
         "foothold": {
             "foothold_anchor": RewardTermCfg(func=envs_mdp.is_alive, weight=0.0),
+        },
+        "style": {
+            "style_anchor": RewardTermCfg(func=envs_mdp.is_alive, weight=0.0),
         },
     }
 

@@ -135,6 +135,53 @@ class InstinctRlEnv(ManagerBasedRlEnv):
         terrain = self.scene.terrain
         if terrain is not None and hasattr(terrain, "debug_vis"):
             terrain.debug_vis(visualizer)
+        self._debug_vis_foothold_imagination(visualizer)
+
+    def _debug_vis_foothold_imagination(self, visualizer: DebugVisualizer) -> None:
+        data = getattr(self, "_instinct_foothold_imagination_vis", None)
+        if not isinstance(data, dict):
+            return
+        points_w = data.get("points_w")
+        if not isinstance(points_w, torch.Tensor) or points_w.ndim != 3 or points_w.shape[-1] != 3:
+            return
+
+        sigma = data.get("sigma")
+        gate = data.get("terrain_gate")
+        env_indices = visualizer.get_env_indices(self.num_envs)
+        if not env_indices:
+            return
+
+        foot_colors = (
+            (1.0, 0.85, 0.05, 0.9),
+            (0.9, 0.1, 1.0, 0.9),
+        )
+        muted_color = (0.55, 0.55, 0.55, 0.35)
+
+        for env_idx in env_indices:
+            if env_idx >= points_w.shape[0]:
+                continue
+            for foot_idx in range(points_w.shape[1]):
+                center = points_w[env_idx, foot_idx]
+                if not torch.isfinite(center).all():
+                    continue
+                active = True
+                if isinstance(gate, torch.Tensor) and gate.numel() > env_idx:
+                    active = bool(gate.reshape(-1)[env_idx].item() > 0.5)
+                color = foot_colors[min(foot_idx, len(foot_colors) - 1)] if active else muted_color
+                if isinstance(sigma, torch.Tensor) and sigma.ndim == 2:
+                    sigma_value = float(sigma[env_idx, foot_idx].detach().clamp(min=0.0, max=0.25).item())
+                    visualizer.add_sphere(
+                        center=center,
+                        radius=max(0.055, sigma_value),
+                        color=(color[0], color[1], color[2], 0.18 if active else 0.08),
+                        label=f"foothold_imagined_sigma_{env_idx}_{foot_idx}",
+                    )
+                visualizer.add_sphere(
+                    center=center,
+                    radius=0.045,
+                    color=color,
+                    label=f"foothold_imagined_{env_idx}_{foot_idx}",
+                )
 
     def _reset_idx(self, env_ids: Sequence[int] | torch.Tensor) -> None:
         if isinstance(env_ids, Sequence):

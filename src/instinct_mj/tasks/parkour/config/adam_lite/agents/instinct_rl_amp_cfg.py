@@ -12,6 +12,7 @@ from instinct_mj.rl import (
     FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
+    InstinctRlEncoderActorCriticCfg,
     InstinctRlEncoderMoEActorCriticCfg,
     InstinctRlNormalizerCfg,
     InstinctRlOnPolicyRunnerCfg,
@@ -57,6 +58,20 @@ class PolicyCfg(EncoderTerrainActorCriticCfg):
     terrain_latent_component: str = "parallel_latent_0_depth_encoder"
     terrain_predictor_configs: dict[str, Any] = field(
         default_factory=lambda: {"hidden_sizes": [256, 128], "nonlinearity": "ReLU"}
+    )
+
+
+@dataclass(kw_only=True)
+class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
     )
 
 
@@ -143,15 +158,48 @@ class AmpAlgoCfg(EstimatorWasabiPpoAlgorithmCfg):
 
 
 @dataclass(kw_only=True)
-class FootholdAmpAlgoCfg(AmpAlgoCfg, FootholdWasabiPpoAlgorithmCfg):
-    """AMP（判别器 reward + estimator）+ foothold guidance。字段取二者并集，class_name 用 Foothold 版。
+class FootholdAmpAlgoCfg(FootholdWasabiPpoAlgorithmCfg):
+    """AMP discriminator + foothold guidance, without terrain/velocity estimator heads."""
 
-    AmpAlgoCfg 须在前：dataclass MRO 以先出现的父类字段为准，否则 discriminator_kwargs 等 AMP 字段会落回 None。
-    """
-
-    class_name: str = "FootholdWasabiEstimatorPPO"
-    advantage_mixing_weights: tuple[float, ...] = (1.0, 0.25)              # (task, foothold)
-    auxiliary_reward_per_env_reward_coefs: tuple[float, ...] = (0.0, 1.0)  # 所有 aux reward(判别器+foothold) 进第二组
+    class_name: str = "FootholdWasabiPPO"
+    discriminator_kwargs: dict[str, Any] | None = field(
+        default_factory=lambda: {
+            "hidden_sizes": [1024, 512],
+            "nonlinearity": "ReLU",
+        }
+    )
+    discriminator_reward_coef: float | None = 0.25
+    discriminator_reward_type: str | None = "quad"
+    discriminator_loss_func: str | None = "MSELoss"
+    discriminator_gradient_penalty_coef: float | None = 5.0
+    discriminator_optimizer_class_name: str | None = "AdamW"
+    discriminator_weight_decay_coef: float | None = 3e-4
+    discriminator_logit_weight_decay_coef: float | None = 0.04
+    discriminator_optimizer_kwargs: dict[str, Any] | None = field(
+        default_factory=lambda: {
+            "lr": 1.0e-4,
+            "betas": [0.9, 0.999],
+        }
+    )
+    value_loss_coef: float = 1.0
+    use_clipped_value_loss: bool = True
+    clip_param: float = 0.2
+    entropy_coef: float = 0.006
+    num_learning_epochs: int = 5
+    num_mini_batches: int = 4
+    learning_rate: float = 1.0e-3
+    schedule: str = "adaptive"
+    gamma: float = 0.99
+    lam: float = 0.95
+    desired_kl: float = 0.01
+    max_grad_norm: float = 1.0
+    advantage_mixing_weights: tuple[float, ...] = (1.0, 0.25, 0.25)
+    auxiliary_reward_per_env_reward_coefs_by_key: dict[str, tuple[float, ...]] = field(
+        default_factory=lambda: {
+            "discriminator_reward": (0.0, 0.0, 1.0),
+            "foothold_reward": (0.0, 1.0, 0.0),
+        }
+    )
 
 
 @dataclass(kw_only=True)
@@ -230,7 +278,7 @@ def adam_lite_parkour_velest_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
 @dataclass(kw_only=True)
 class AdamLiteFootholdParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
     experiment_name: str = "adam_lite_foothold_parkour"
-    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: VelEstPolicyCfg())
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdVisionPolicyCfg())
     algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdAmpAlgoCfg())
 
 
