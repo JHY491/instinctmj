@@ -23,20 +23,27 @@ _GRU_PROPRIO_TERM_MAP = (
 )
 
 
+def _depth_history_length(depth_term: Any) -> int:
+    depth_params = depth_term.params
+    return (
+        (depth_params["num_output_frames"] - 1) * depth_params["history_skip_frames"]
+        + 1
+        + depth_params["delayed_frame_ranges"][1]
+    )
+
+
 def configure_gru_policy_observations(cfg: ManagerBasedRlEnvCfg) -> None:
     """Add GRU proprio history terms and switch policy depth to a single latest frame."""
     policy_terms = cfg.observations["policy"].terms
+    critic_terms = cfg.observations["critic"].terms
 
     depth_term = policy_terms["depth_image"]
     depth_term.params["num_output_frames"] = 1
     depth_term.params["history_skip_frames"] = 1
 
-    depth_params = depth_term.params
-    depth_history_length = (
-        (depth_params["num_output_frames"] - 1) * depth_params["history_skip_frames"]
-        + 1
-        + depth_params["delayed_frame_ranges"][1]
-    )
+    depth_history_length = _depth_history_length(depth_term)
+    if "depth_image" in critic_terms:
+        depth_history_length = max(depth_history_length, _depth_history_length(critic_terms["depth_image"]))
     for sensor_cfg in cfg.scene.sensors:
         if sensor_cfg.name == "camera":
             sensor_cfg.data_histories["distance_to_image_plane_noised"] = depth_history_length

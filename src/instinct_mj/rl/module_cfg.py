@@ -94,9 +94,9 @@ class InstinctRlDepthProprioGruEncoderCfg:
         "gru_actions",
     ])
     depth_channels: list[int] = field(default_factory=lambda: [32, 64, 128])
-    depth_kernel_sizes: list[int] = field(default_factory=lambda: [8, 4, 3])
-    depth_strides: list[int] = field(default_factory=lambda: [4, 2, 2])
-    depth_paddings: list[int] = field(default_factory=lambda: [0, 0, 0])
+    depth_kernel_sizes: list[int] = field(default_factory=lambda: [5, 3, 3])
+    depth_strides: list[int] = field(default_factory=lambda: [2, 2, 2])
+    depth_paddings: list[int] = field(default_factory=lambda: [2, 1, 1])
     depth_embedding_dim: int = 128
     proprio_hidden_sizes: list[int] = field(default_factory=lambda: [512, 256])
     proprio_embedding_dim: int = 128

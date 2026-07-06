@@ -56,7 +56,7 @@ url = "https://pypi.org/simple"
 
 [tool.uv.sources]
 mjlab = { git = "https://github.com/mujocolab/mjlab.git" }
-instinct_rl = { git = "https://github.com/project-instinct/instinct_rl.git" }
+instinct_rl = { git = "https://github.com/Yangrurui/instinct_rl.git", rev = "16fa70ff7a3dc5b82783384795b56af3bb1cb056" }
 
 [tool.setuptools]
 package-dir = {"" = "src"}
