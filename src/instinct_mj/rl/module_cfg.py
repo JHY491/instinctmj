@@ -108,11 +108,41 @@ class InstinctRlDepthProprioGruEncoderCfg:
     takeout_input_components: bool = True
 
 
+@dataclass
+class InstinctRlDepthProprioRecurrentGruEncoderCfg:
+  """Configuration block for DepthProprioRecurrentGruEncoder (cross-step GRU memory)."""
+
+  class_name: str = "DepthProprioRecurrentGruEncoder"
+  depth_component_names: list[str] = field(default_factory=lambda: ["depth_image"])
+  proprio_component_names: list[str] = field(default_factory=lambda: [
+    "base_ang_vel",
+    "projected_gravity",
+    "velocity_commands",
+    "joint_pos",
+    "joint_vel",
+    "actions",
+  ])
+  depth_channels: list[int] = field(default_factory=lambda: [32, 64, 128])
+  depth_kernel_sizes: list[int] = field(default_factory=lambda: [5, 3, 3])
+  depth_strides: list[int] = field(default_factory=lambda: [2, 2, 2])
+  depth_paddings: list[int] = field(default_factory=lambda: [2, 1, 1])
+  depth_embedding_dim: int = 128
+  proprio_hidden_sizes: list[int] = field(default_factory=lambda: [512, 256])
+  proprio_embedding_dim: int = 128
+  gru_hidden_dim: int = 256
+  gru_num_layers: int = 1
+  fusion_hidden_sizes: list[int] = field(default_factory=lambda: [512, 256, 128])
+  output_size: int = 48
+  nonlinearity: str = "ELU"
+  takeout_input_components: bool = True
+
+
 __all__ = [
-    "InstinctRlParallelBlockCfg",
-    "InstinctRlMlpCfg",
-    "InstinctRlConv2dHeadCfg",
-    "InstinctRlTransformerHeadCfg",
-    "InstinctRlPerceptiveEncoderCfg",
-    "InstinctRlDepthProprioGruEncoderCfg",
+  "InstinctRlParallelBlockCfg",
+  "InstinctRlMlpCfg",
+  "InstinctRlConv2dHeadCfg",
+  "InstinctRlTransformerHeadCfg",
+  "InstinctRlPerceptiveEncoderCfg",
+  "InstinctRlDepthProprioGruEncoderCfg",
+  "InstinctRlDepthProprioRecurrentGruEncoderCfg",
 ]

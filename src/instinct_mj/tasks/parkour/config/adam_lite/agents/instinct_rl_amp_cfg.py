@@ -13,7 +13,9 @@ from instinct_mj.rl import (
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
     InstinctRlDepthProprioGruEncoderCfg,
+    InstinctRlDepthProprioRecurrentGruEncoderCfg,
     InstinctRlEncoderActorCriticCfg,
+    InstinctRlEncoderRecurrentActorCriticCfg,
     InstinctRlEncoderMoEActorCriticCfg,
     InstinctRlNormalizerCfg,
     InstinctRlOnPolicyRunnerCfg,
@@ -314,3 +316,28 @@ class AdamLiteFootholdGruVisionAmpRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
 def adam_lite_foothold_gru_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """Foothold GRU 任务 runner（depth CNN + proprio GRU encoder）。"""
     return AdamLiteFootholdGruVisionAmpRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class FootholdRecurrentGruVisionPolicyCfg(InstinctRlEncoderRecurrentActorCriticCfg):
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_proprio_recurrent_gru": InstinctRlDepthProprioRecurrentGruEncoderCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdRecurrentGruVisionAmpRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_gru_recurrent"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdRecurrentGruVisionPolicyCfg())
+
+
+def adam_lite_foothold_recurrent_gru_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold recurrent GRU 任务 runner（cross-step depth+proprio GRU encoder）。"""
+    return AdamLiteFootholdRecurrentGruVisionAmpRunnerCfg()

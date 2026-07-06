@@ -214,3 +214,29 @@ register_instinct_task(
   play_env_cfg_factory=lambda: _foothold_gru_parkour_cfg(play=True),
   instinct_rl_cfg_factory=_foothold_gru_runner_cfg,
 )
+
+
+def _foothold_recurrent_gru_parkour_cfg(play: bool):
+  from .adam_lite_foothold_recurrent_gru_parkour_cfg import instinct_adam_lite_foothold_recurrent_gru_final_cfg
+  return instinct_adam_lite_foothold_recurrent_gru_final_cfg(play=play)
+
+
+def _foothold_recurrent_gru_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_recurrent_gru_amp_runner_cfg
+  return adam_lite_foothold_recurrent_gru_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-v0",
+  env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=False),
+  play_env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_recurrent_gru_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-Play-v0",
+  env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
+  play_env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_recurrent_gru_runner_cfg,
+)

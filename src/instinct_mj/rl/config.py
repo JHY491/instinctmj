@@ -169,6 +169,13 @@ class InstinctRlEncoderActorCriticCfg(InstinctRlActorCriticCfg):
 
 
 @dataclass
+class InstinctRlEncoderRecurrentActorCriticCfg(InstinctRlActorCriticCfg):
+  """Encoder actor-critic with cross-step recurrent encoder block."""
+
+  class_name: str = "EncoderRecurrentActorCritic"
+
+
+@dataclass
 class InstinctRlEncoderActorCriticRecurrentCfg(InstinctRlActorCriticRecurrentCfg):
     """Encoder + recurrent actor-critic."""
 
