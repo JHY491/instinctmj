@@ -19,6 +19,7 @@ from .config import (
 )
 from .module_cfg import (
     InstinctRlConv2dHeadCfg,
+    InstinctRlDepthProprioGruEncoderCfg,
     InstinctRlMlpCfg,
     InstinctRlParallelBlockCfg,
     InstinctRlPerceptiveEncoderCfg,
@@ -36,6 +37,7 @@ __all__ = [
     "InstinctRlActorCriticCfg",
     "InstinctRlActorCriticRecurrentCfg",
     "InstinctRlConv2dHeadCfg",
+    "InstinctRlDepthProprioGruEncoderCfg",
     "InstinctRlEncoderActorCriticCfg",
     "InstinctRlEncoderActorCriticRecurrentCfg",
     "InstinctRlEncoderMoEActorCriticCfg",

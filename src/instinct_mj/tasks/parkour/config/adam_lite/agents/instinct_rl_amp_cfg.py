@@ -12,6 +12,7 @@ from instinct_mj.rl import (
     FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
+    InstinctRlDepthProprioGruEncoderCfg,
     InstinctRlEncoderActorCriticCfg,
     InstinctRlEncoderMoEActorCriticCfg,
     InstinctRlNormalizerCfg,
@@ -69,6 +70,20 @@ class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
     activation: str = "elu"
     encoder_configs: dict[str, Any] | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+
+
+@dataclass(kw_only=True)
+class FootholdGruVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_proprio_gru": InstinctRlDepthProprioGruEncoderCfg()}
     )
     critic_encoder_configs: dict[str, Any] | str | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
@@ -288,3 +303,14 @@ class AdamLiteFootholdParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 def adam_lite_foothold_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """Foothold 任务 runner（algorithm=FootholdAmpAlgoCfg）。"""
     return AdamLiteFootholdParkourRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdGruVisionAmpRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_gru"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdGruVisionPolicyCfg())
+
+
+def adam_lite_foothold_gru_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold GRU 任务 runner（depth CNN + proprio GRU encoder）。"""
+    return AdamLiteFootholdGruVisionAmpRunnerCfg()
