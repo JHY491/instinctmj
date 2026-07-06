@@ -17,6 +17,13 @@ from instinct_mj.tasks.parkour.config.adam_lite.adam_lite_parkour_cfg import (
 )
 
 
+_FOOTHOLD_REGION_RES = 0.025
+# This ray grid is a terrain cache around the current foot, not the support
+# patch itself. SSR evaluates each imagined point with the sole-sized patch
+# configured as sole_grid=(5, 10) in FootholdWasabiPpoAlgorithmCfg.
+_FOOTHOLD_TERRAIN_CACHE_SIZE = (0.5, 0.3)
+
+
 def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     """楼梯 env + foothold 传感器/观测组。"""
     cfg = instinct_adam_lite_parkour_env_cfg(play=play)
@@ -44,18 +51,18 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
         RayCastSensorCfg(
             name="left_foot_region_scanner",
             frame=ObjRef(type="site", name="left_foot_scan", entity="robot"),
-            pattern=GridPatternCfg(resolution=0.025, size=(0.5, 0.3)),
+            pattern=GridPatternCfg(resolution=_FOOTHOLD_REGION_RES, size=_FOOTHOLD_TERRAIN_CACHE_SIZE),
             ray_alignment="yaw",
             max_distance=10.0,
-            debug_vis=play,
+            debug_vis=False,
         ),
         RayCastSensorCfg(
             name="right_foot_region_scanner",
             frame=ObjRef(type="site", name="right_foot_scan", entity="robot"),
-            pattern=GridPatternCfg(resolution=0.025, size=(0.5, 0.3)),
+            pattern=GridPatternCfg(resolution=_FOOTHOLD_REGION_RES, size=_FOOTHOLD_TERRAIN_CACHE_SIZE),
             ray_alignment="yaw",
             max_distance=10.0,
-            debug_vis=play,
+            debug_vis=False,
         ),
     )
     cfg.scene.sensors = tuple(cfg.scene.sensors) + region_scanners
