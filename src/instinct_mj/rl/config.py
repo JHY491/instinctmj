@@ -255,7 +255,7 @@ class FootholdWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
     sole_grid: tuple[int, int] = (5, 10)
     epsilon_h: float = 0.03
     sigma_f: float = 0.0625
-    num_swing_samples: int = 8
+    num_swing_samples: int = 3  # swing 期望的 Gauss-Hermite 每轴节点数（K=该值^2 个高斯加权样本）
     terrain_level_gate: int = 5
     imagination_hidden_sizes: tuple[int, ...] = (256, 128)
     imagination_lr: float = 5.0e-4

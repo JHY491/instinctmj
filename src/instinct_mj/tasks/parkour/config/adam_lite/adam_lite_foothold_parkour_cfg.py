@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from typing import Any, cast
 
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
 import mjlab.envs.mdp as envs_mdp
@@ -120,11 +121,10 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
     )
 
     # Three reward groups match SSR: locomotion task, foothold guidance, and AMP style.
-    task_rewards = {
-        reward_name: reward_cfg
-        for reward_name, reward_cfg in cfg.rewards.items()
-        if reward_name != "cref_stair_foothold"
-    }
+    # Keep the analytic CReF stair shaping (301cefc baseline) as the dominant, always-on
+    # foot-placement signal; SSR imagined-foothold guidance is layered on additively via the
+    # second critic so the task can only improve over, not regress from, that baseline.
+    task_rewards = dict(cfg.rewards)
     cfg.rewards = {
         "task": task_rewards,
         "foothold": {
@@ -141,6 +141,11 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
 def instinct_adam_lite_foothold_parkour_final_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg = instinct_adam_lite_foothold_parkour_env_cfg(play=play)
     if play:
+        # 父级 play 会把 num_rows 缩到 4（level 最高 3），达不到 SSR foothold gate=5。
+        # 与训练 STAIRS_ONLY_TERRAINS_CFG 对齐，才能在 play 里评测后期楼梯难度。
+        terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
+        terrain_generator.num_rows = 10
+        terrain_generator.num_cols = 20
         cfg.viewer = ViewerConfig(
             lookat=(0.0, 0.75, 0.0),
             distance=4.123105625617661,

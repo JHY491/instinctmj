@@ -193,7 +193,10 @@ class FootholdAmpAlgoCfg(FootholdWasabiPpoAlgorithmCfg):
     lam: float = 0.95
     desired_kl: float = 0.01
     max_grad_norm: float = 1.0
-    advantage_mixing_weights: tuple[float, ...] = (1.0, 0.25, 0.25)
+    # (task, foothold, style). Keep AMP style at full advantage weight so the human-like
+    # motion prior stays as strong as in the 301cefc baseline; only the SSR foothold critic
+    # (index 1) is down-weighted to w_f=0.25.
+    advantage_mixing_weights: tuple[float, ...] = (1.0, 0.25, 1.0)
     auxiliary_reward_per_env_reward_coefs_by_key: dict[str, tuple[float, ...]] = field(
         default_factory=lambda: {
             "discriminator_reward": (0.0, 0.0, 1.0),

@@ -146,7 +146,6 @@ class InstinctRlEnv(ManagerBasedRlEnv):
             return
 
         sigma = data.get("sigma")
-        gate = data.get("terrain_gate")
         env_indices = visualizer.get_env_indices(self.num_envs)
         if not env_indices:
             return
@@ -155,7 +154,6 @@ class InstinctRlEnv(ManagerBasedRlEnv):
             (1.0, 0.85, 0.05, 0.9),
             (0.9, 0.1, 1.0, 0.9),
         )
-        muted_color = (0.55, 0.55, 0.55, 0.35)
 
         for env_idx in env_indices:
             if env_idx >= points_w.shape[0]:
@@ -164,16 +162,13 @@ class InstinctRlEnv(ManagerBasedRlEnv):
                 center = points_w[env_idx, foot_idx]
                 if not torch.isfinite(center).all():
                     continue
-                active = True
-                if isinstance(gate, torch.Tensor) and gate.numel() > env_idx:
-                    active = bool(gate.reshape(-1)[env_idx].item() > 0.5)
-                color = foot_colors[min(foot_idx, len(foot_colors) - 1)] if active else muted_color
+                color = foot_colors[min(foot_idx, len(foot_colors) - 1)]
                 if isinstance(sigma, torch.Tensor) and sigma.ndim == 2:
                     sigma_value = float(sigma[env_idx, foot_idx].detach().clamp(min=0.0, max=0.25).item())
                     visualizer.add_sphere(
                         center=center,
                         radius=max(0.055, sigma_value),
-                        color=(color[0], color[1], color[2], 0.18 if active else 0.08),
+                        color=(color[0], color[1], color[2], 0.18),
                         label=f"foothold_imagined_sigma_{env_idx}_{foot_idx}",
                     )
                 visualizer.add_sphere(

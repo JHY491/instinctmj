@@ -1008,7 +1008,7 @@ def instinct_adam_lite_parkour_env_cfg(
         cfg.scene.terrain.collision_debug_vis = False
         base_velocity_cmd = cast(PoseVelocityCommandCfg, cfg.commands["base_velocity"])
         base_velocity_cmd.debug_vis = True
-        base_velocity_cmd.show_cref_foothold_candidates = True
+        base_velocity_cmd.show_cref_foothold_candidates = False
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
         cfg.events.pop("register_virtual_obstacles", None)

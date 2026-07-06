@@ -11,7 +11,8 @@
 
 - 保持本项目可作为 `instinct_rl` 的即插即用组件。
 - 优先参考 `mjlab` 仓库中相似实现，采用其原生接口与组织方式。
-- 本任务基于G1 parkour任务迁移到Adam_SP，改动只需要改Adam_SP相关部分代码，除非报错不然不需要改G1相关代码
+- 当前任务：在 **Adam Lite** 楼梯 parkour 上复现 SSR（https://ssr-humanoid.github.io/）的 imagined foothold guidance（想象落足点引导）。改动只需改 **Adam Lite** 相关代码，除非报错不然不需要改 Adam_SP / G1 相关代码。
+- baseline 基准为 commit `301cefc`（纯视觉 `PolicyCfg = InstinctRlEncoderActorCriticCfg` + `WasabiPPO` + 常开的 `cref_stair_foothold` 分析式楼梯落脚 reward）。foothold 任务必须是该 baseline 的**干净超集**：保留 CReF 与 AMP 风格先验的原有强度，SSR 想象落足点仅作为第二个 critic 上的**附加** reward 叠加，不得为引入它而回退 baseline 已验证有效的塑形/架构。
 
 ## 迁移规则
 

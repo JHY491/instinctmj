@@ -1005,7 +1005,7 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
         cfg.scene.terrain.collision_debug_vis = False
         base_velocity_cmd = cast(PoseVelocityCommandCfg, cfg.commands["base_velocity"])
         base_velocity_cmd.debug_vis = True
-        base_velocity_cmd.show_cref_foothold_candidates = True
+        base_velocity_cmd.show_cref_foothold_candidates = False
         base_velocity_cmd.cref_foothold_reward_name = "cref_stepping_stone_foothold"
         cfg.terminations.pop("root_height", None)
         cfg.events.pop("physics_material", None)
