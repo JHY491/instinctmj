@@ -1,6 +1,7 @@
 from .config import (
     EncoderTerrainActorCriticCfg,
     EncoderTerrainVelActorCriticCfg,
+    EncoderVelActorCriticCfg,
     EstimatorActorCriticCfg,
     EstimatorActorCriticRecurrentCfg,
     EstimatorWasabiPpoAlgorithmCfg,
@@ -32,6 +33,7 @@ from .vecenv_wrapper import InstinctRlVecEnvWrapper
 __all__ = [
     "EncoderTerrainActorCriticCfg",
     "EncoderTerrainVelActorCriticCfg",
+    "EncoderVelActorCriticCfg",
     "EstimatorActorCriticCfg",
     "EstimatorActorCriticRecurrentCfg",
     "EstimatorWasabiPpoAlgorithmCfg",

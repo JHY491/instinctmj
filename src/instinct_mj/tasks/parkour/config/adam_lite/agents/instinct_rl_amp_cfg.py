@@ -8,6 +8,7 @@ from typing import Any
 from instinct_mj.rl import (
     EncoderTerrainActorCriticCfg,
     EncoderTerrainVelActorCriticCfg,
+    EncoderVelActorCriticCfg,
     EstimatorWasabiPpoAlgorithmCfg,
     FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
@@ -75,6 +76,34 @@ class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
     )
     critic_encoder_configs: dict[str, Any] | str | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+
+
+@dataclass(kw_only=True)
+class FootholdVelEstVisionPolicyCfg(EncoderVelActorCriticCfg):
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
+    )
+    vel_estimator_obs_components: list[str] = field(
+        default_factory=lambda: [
+            "base_ang_vel",
+            "projected_gravity",
+            "velocity_commands",
+            "joint_pos",
+            "joint_vel",
+            "actions",
+        ]
+    )
+    vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel_est"])
+    vel_estimator_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [512, 256, 128], "nonlinearity": "ReLU"}
     )
 
 
@@ -223,6 +252,17 @@ class FootholdAmpAlgoCfg(FootholdWasabiPpoAlgorithmCfg):
 
 
 @dataclass(kw_only=True)
+class FootholdVelEstAmpAlgoCfg(FootholdAmpAlgoCfg):
+    """Foothold + AMP + velocity-only estimator supervision."""
+
+    class_name: str = "FootholdWasabiEstimatorPPO"
+    estimator_loss_coef: float = 1.0
+    target_from_critic: bool = True
+    estimator_loss_func: str = "mse_loss"
+    estimator_loss_kwargs: dict[str, Any] | None = None
+
+
+@dataclass(kw_only=True)
 class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     num_steps_per_env: int = 24
     policy_observation_group: str = "policy"
@@ -305,6 +345,18 @@ class AdamLiteFootholdParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 def adam_lite_foothold_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """Foothold 任务 runner（algorithm=FootholdAmpAlgoCfg）。"""
     return AdamLiteFootholdParkourRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdVelEstParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_velest_parkour"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdVelEstVisionPolicyCfg())
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdVelEstAmpAlgoCfg())
+
+
+def adam_lite_foothold_velest_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold stage-2 runner with a velocity-only MLP estimator."""
+    return AdamLiteFootholdVelEstParkourRunnerCfg()
 
 
 @dataclass(kw_only=True)

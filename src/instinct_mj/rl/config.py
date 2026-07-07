@@ -241,6 +241,16 @@ class EncoderTerrainVelActorCriticCfg(EncoderTerrainActorCriticCfg):
 
 
 @dataclass
+class EncoderVelActorCriticCfg(InstinctRlEncoderActorCriticCfg):
+    """Encoder actor-critic with a velocity-only estimator injected into the actor."""
+
+    class_name: str = "EncoderVelActorCritic"
+    vel_estimator_obs_components: list[str] = field(default_factory=list)
+    vel_target_components: list[str] = field(default_factory=list)
+    vel_estimator_configs: dict[str, Any] | None = None
+
+
+@dataclass
 class EstimatorWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
     """WasabiPPO with estimator supervision loss."""
 
