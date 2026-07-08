@@ -80,6 +80,58 @@ class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
 
 
 @dataclass(kw_only=True)
+class DepthEncoderDeepCfg(InstinctRlConv2dHeadCfg):
+    """SSR 论文对齐的 Depth CNN: channels [32,64,128], stride 2× 下采样。
+
+    输入: [10, 36, 36] (10 帧堆叠, 36×36 depth 裁切后) →
+    CNN 输出: [128, 5, 5] → MLP 压缩到 128-dim.
+    """
+    output_size: int | None = 128
+    channels: list = field(default_factory=lambda: [32, 64, 128])
+    kernel_sizes: list = field(default_factory=lambda: [5, 3, 3])
+    strides: list = field(default_factory=lambda: [2, 2, 2])
+    hidden_sizes: list = field(default_factory=lambda: [512, 256])
+    paddings: list = field(default_factory=lambda: [2, 1, 1])
+    nonlinearity: str | None = "ELU"
+    use_maxpool: bool = False
+    component_names: list = field(
+        default_factory=lambda: [
+            "depth_image",
+        ]
+    )
+    takeout_input_components: bool = True
+
+
+@dataclass(kw_only=True)
+class FootholdVelEstDeepVisionPolicyCfg(EncoderVelActorCriticCfg):
+    """VelEst + SSR 对齐的深度 CNN (无 GRU)。"""
+    init_noise_std: float = 1.0
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
+    )
+    vel_estimator_obs_components: list[str] = field(
+        default_factory=lambda: [
+            "base_ang_vel",
+            "projected_gravity",
+            "velocity_commands",
+            "joint_pos",
+            "joint_vel",
+            "actions",
+        ]
+    )
+    vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel_est"])
+    vel_estimator_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [512, 256, 128], "nonlinearity": "ReLU"}
+    )
+
+
+@dataclass(kw_only=True)
 class FootholdVelEstVisionPolicyCfg(EncoderVelActorCriticCfg):
     init_noise_std: float = 1.0
     actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
@@ -357,6 +409,17 @@ class AdamLiteFootholdVelEstParkourRunnerCfg(AdamSPParkourVisionAmpRunnerCfg):
 def adam_lite_foothold_velest_parkour_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
     """Foothold stage-2 runner with a velocity-only MLP estimator."""
     return AdamLiteFootholdVelEstParkourRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdVelEstDeepRunnerCfg(AdamLiteFootholdVelEstParkourRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_velest_deepcnn"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdVelEstDeepVisionPolicyCfg())
+
+
+def adam_lite_foothold_velest_deep_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold VelEst + SSR 对齐的深度 CNN 编码器。"""
+    return AdamLiteFootholdVelEstDeepRunnerCfg()
 
 
 @dataclass(kw_only=True)

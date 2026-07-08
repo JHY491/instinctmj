@@ -37,6 +37,8 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
     )
     for sensor_cfg in cfg.scene.sensors:
         if sensor_cfg.name == "camera":
+            # SSR 论文对齐: depth image 36×36，64×36 居中裁切 (top, bottom, left, right)
+            sensor_cfg.noise_pipeline["crop_and_resize"].crop_region = (0, 0, 14, 14)
             sensor_cfg.data_histories["distance_to_image_plane_noised"] = depth_history_length
     cfg.observations["critic"].terms = {
         term_name: term_cfg
@@ -142,6 +144,30 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
         },
     }
 
+    return cfg
+
+
+def instinct_adam_lite_foothold_deep_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
+    """Foothold VelEst + SSR 对齐深度 CNN 的 env (仅 run_name 不同)。"""
+    cfg = instinct_adam_lite_foothold_parkour_env_cfg(play=play)
+    setattr(cfg, "run_name", "AdamLiteFootholdDeepCNN")
+    return cfg
+
+
+def instinct_adam_lite_foothold_deep_final_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
+    cfg = instinct_adam_lite_foothold_deep_env_cfg(play=play)
+    if play:
+        terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
+        terrain_generator.num_rows = 10
+        terrain_generator.num_cols = 20
+        cfg.viewer = ViewerConfig(
+            lookat=(0.0, 0.75, 0.0),
+            distance=4.123105625617661,
+            elevation=-14.036243467926479,
+            azimuth=180.0,
+            origin_type=ViewerConfig.OriginType.WORLD,
+            entity_name=None,
+        )
     return cfg
 
 
