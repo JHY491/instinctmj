@@ -130,10 +130,11 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
     )
 
     # Three reward groups match SSR: locomotion task, foothold guidance, and AMP style.
-    # Keep the analytic CReF stair shaping (301cefc baseline) as the dominant, always-on
-    # foot-placement signal; SSR imagined-foothold guidance is layered on additively via the
-    # second critic so the task can only improve over, not regress from, that baseline.
-    task_rewards = dict(cfg.rewards)
+    # Drop analytic CReF stair shaping — foothold guidance comes only from SSR imagined
+    # foothold r^f on the second critic (see AGENTS.md).
+    task_rewards = {
+        name: term for name, term in dict(cfg.rewards).items() if name != "cref_stair_foothold"
+    }
     cfg.rewards = {
         "task": task_rewards,
         "foothold": {
@@ -148,8 +149,12 @@ def instinct_adam_lite_foothold_parkour_env_cfg(*, play: bool = False) -> Manage
 
 
 def instinct_adam_lite_foothold_deep_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
-    """Foothold VelEst + SSR 对齐深度 CNN 的 env (仅 run_name 不同)。"""
-    cfg = instinct_adam_lite_foothold_parkour_env_cfg(play=play)
+    """Foothold VelEst + SSR 对齐深度 CNN 的 env（观测与 velest 一致，run_name 区分实验）。"""
+    from instinct_mj.tasks.parkour.config.adam_lite.adam_lite_foothold_velest_parkour_cfg import (
+        instinct_adam_lite_foothold_velest_env_cfg,
+    )
+
+    cfg = instinct_adam_lite_foothold_velest_env_cfg(play=play)
     setattr(cfg, "run_name", "AdamLiteFootholdDeepCNN")
     return cfg
 
@@ -174,7 +179,7 @@ def instinct_adam_lite_foothold_deep_final_cfg(*, play: bool = False) -> Manager
 def instinct_adam_lite_foothold_parkour_final_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg = instinct_adam_lite_foothold_parkour_env_cfg(play=play)
     if play:
-        # 父级 play 会把 num_rows 缩到 4（level 最高 3），达不到 SSR foothold gate=5。
+        # 父级 play 会把 num_rows 缩到 4（level 最高 3），刚好卡在 foothold gate=3 边界；
         # 与训练 STAIRS_ONLY_TERRAINS_CFG 对齐，才能在 play 里评测后期楼梯难度。
         terrain_generator = cast(Any, cfg.scene.terrain.terrain_generator)
         terrain_generator.num_rows = 10

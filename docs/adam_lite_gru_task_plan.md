@@ -7,7 +7,7 @@ Create an isolated Adam Lite parkour task that adds the SSR-style `depth CNN + p
 The new task should be a clean experiment branch of the current Adam Lite foothold setup:
 
 - Keep the existing foothold task unchanged.
-- Keep CReF, AMP style prior, and imagined foothold guidance strengths unchanged.
+- Keep AMP style prior and imagined foothold guidance strengths unchanged (no CReF on foothold tasks).
 - Add GRU only as the policy perception encoder for a new task id.
 - Treat depth as the latest available image, not a depth history sequence.
 - Treat proprioception history as the GRU time sequence.
@@ -38,7 +38,7 @@ Do not implement a fully recurrent actor-critic in the first version. The first 
   - `Instinct-Parkour-Adam-Lite-Foothold-v0`
   - `Instinct-Parkour-Adam-Lite-Foothold-Play-v0`
 - Do not change the existing foothold runner config used by those task ids.
-- Do not downgrade AMP, CReF, or foothold reward coefficients to make GRU easier to train.
+- Do not downgrade AMP or foothold reward coefficients to make GRU easier to train.
 - Do not add a true rollout-hidden recurrent PPO path in this phase.
 - Do not make depth a 10 Hz held stream. Real deployment is 60 Hz camera with 50 Hz policy; training depth at 50 Hz with small delay randomization is acceptable.
 - Do not modify Adam_SP or G1 code unless an error proves it is required.
