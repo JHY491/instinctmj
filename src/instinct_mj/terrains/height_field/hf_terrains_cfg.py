@@ -1127,6 +1127,42 @@ class PerlinSquareGapTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
 
 
 @dataclass(kw_only=True)
+class PerlinContinuousBoxGapTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
+    """Continuous box platforms with gaps along travel (+x).
+
+    Pit-filled tile; entry / mid boxes / exit are raised to z=0 on a centered
+    lateral corridor. ``gap_distance_range`` is interpolated by difficulty.
+    """
+
+    flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+
+    gap_distance_range: tuple[float, float] = (0.1, 0.5)
+    """Clear gap width along travel (meters), interpolated by difficulty."""
+
+    gap_depth: tuple[float, float] = (0.3, 0.3)
+    """Pit depth below walkable surface (meters), sampled uniformly per tile."""
+
+    num_boxes: int = 4
+    """Number of mid boxes between entry and exit platforms."""
+
+    box_length: float = 0.8
+    """Each mid box extent along travel (meters)."""
+
+    platform_length: float = 1.0
+    """Entry and exit platform extent along travel (meters)."""
+
+    platform_width: float = 2.5
+    """Lateral corridor width of walkable boxes (meters)."""
+
+    border_width: float = 0.0
+
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+
+    def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
+        return _RAW_PERLIN_CONTINUOUS_BOX_GAP_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+@dataclass(kw_only=True)
 class PerlinContinuousSlopeTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
     """Configuration for a continuous double-hump slope terrain.
 
@@ -1812,6 +1848,9 @@ _RAW_PERLIN_TILTED_RAMP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.p
 _RAW_PERLIN_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_slope_terrain)
 _RAW_PERLIN_CROSS_STONE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_stone_terrain)
 _RAW_PERLIN_SQUARE_GAP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_square_gap_terrain)
+_RAW_PERLIN_CONTINUOUS_BOX_GAP_TERRAIN_FN = _unwrap_height_field_function(
+    hf_terrains.perlin_continuous_box_gap_terrain
+)
 _RAW_PERLIN_CONTINUOUS_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_continuous_slope_terrain)
 _RAW_PERLIN_CROSS_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_slope_terrain)
 _RAW_PERLIN_SYMMETRICAL_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_symmetrical_slope_terrain)

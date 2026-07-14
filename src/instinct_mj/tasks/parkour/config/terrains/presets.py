@@ -8,6 +8,7 @@ from mjlab.terrains import FlatPatchSamplingCfg
 
 from instinct_mj.terrains.height_field.hf_terrains_cfg import (
     FixedSequenceFlatPatchSamplingCfg,
+    PerlinContinuousBoxGapTerrainCfg,
     PerlinContinuousHurdleTerrainCfg,
     PerlinContinuousSlopeTerrainCfg,
     PerlinCrossSlopeTerrainCfg,
@@ -1146,6 +1147,245 @@ THREE_SLOPES_TERRAINS_CFG = FiledTerrainGeneratorCfg(
 for _perlin_key in ("continuous_slope", "cross_slope", "symmetrical_slope"):
     THREE_SLOPES_TERRAINS_CFG.sub_terrains[_perlin_key].perlin_cfg = copy.deepcopy(_BASE_LIGHT_PERLIN_CFG)
 THREE_SLOPES_TERRAINS_CFG_PLAY = _play_cfg(THREE_SLOPES_TERRAINS_CFG)
+
+# ---------------------------------------------------------------------------
+# Continuous slope only (foothold slopes: r^f disabled per SSR)
+# ---------------------------------------------------------------------------
+
+CONTINUOUS_SLOPE_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
+    seed=0,
+    size=(8.0, 8.0),
+    border_width=3.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=1.0,
+    curriculum=True,
+    add_lights=True,
+    sub_terrains={
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.2,
+            noise_scale=[0.0, 0.2],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "continuous_slope": PerlinContinuousSlopeTerrainCfg(
+            proportion=0.8,
+            slope_angle_range=(12.0, 20.0),
+            total_length=7.4,
+            terrain_width=(1.2, 2.8),
+            max_height=0.39,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+    },
+)
+CONTINUOUS_SLOPE_ONLY_TERRAINS_CFG.sub_terrains["continuous_slope"].perlin_cfg = copy.deepcopy(
+    _BASE_LIGHT_PERLIN_CFG
+)
+CONTINUOUS_SLOPE_ONLY_TERRAINS_CFG_PLAY = _play_cfg(CONTINUOUS_SLOPE_ONLY_TERRAINS_CFG)
+
+# ---------------------------------------------------------------------------
+# Continuous box gaps only (platforms along +x with curriculum gap width; foothold r^f active)
+# ---------------------------------------------------------------------------
+
+SQUARE_GAPS_ONLY_TERRAINS_CFG = FiledTerrainGeneratorCfg(
+    seed=0,
+    size=(8.0, 8.0),
+    border_width=3.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=1.0,
+    curriculum=True,
+    add_lights=True,
+    sub_terrains={
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.2],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "continuous_box_gaps": PerlinContinuousBoxGapTerrainCfg(
+            proportion=0.8,
+            gap_distance_range=(0.1, 0.5),
+            gap_depth=(0.3, 0.3),
+            num_boxes=4,
+            box_length=0.8,
+            platform_length=1.0,
+            platform_width=2.5,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+    },
+)
+SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["continuous_box_gaps"].virtual_obstacle_keys = ("edges",)
+SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["perlin_rough"].virtual_obstacle_keys = ()
+SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["perlin_rough_stand"].virtual_obstacle_keys = ()
+SQUARE_GAPS_ONLY_TERRAINS_CFG_PLAY = _play_cfg(SQUARE_GAPS_ONLY_TERRAINS_CFG)
+
+# ---------------------------------------------------------------------------
+# Foothold mixed: stairs + continuous_slope + continuous_box_gaps (+ flat)
+# SSR: r^f active on stairs/gaps; disabled on continuous_slope (see foothold_guidance_active).
+# ---------------------------------------------------------------------------
+
+FOOTHOLD_MIXED_TERRAINS_CFG = FiledTerrainGeneratorCfg(
+    seed=0,
+    size=(8.0, 8.0),
+    border_width=3.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=1.0,
+    curriculum=True,
+    add_lights=True,
+    sub_terrains={
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.10,
+            noise_scale=[0.0, 0.2],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=0.10,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "continuous_slope": copy.deepcopy(
+            CONTINUOUS_SLOPE_ONLY_TERRAINS_CFG.sub_terrains["continuous_slope"]
+        ),
+        "continuous_box_gaps": copy.deepcopy(
+            SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["continuous_box_gaps"]
+        ),
+        "one_sided_stairs": copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG.sub_terrains["one_sided_stairs"]),
+    },
+)
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].proportion = 0.10
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_box_gaps"].proportion = 0.25
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["one_sided_stairs"].proportion = 0.45
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].perlin_cfg = copy.deepcopy(
+    _BASE_LIGHT_PERLIN_CFG
+)
+# Selective virtual edges: stairs/gaps only. Slopes and planes must stay empty
+# (smooth surfaces must not get edge-cylinder virtual obstacles).
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["one_sided_stairs"].virtual_obstacle_keys = ("edges",)
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_box_gaps"].virtual_obstacle_keys = ("edges",)
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].virtual_obstacle_keys = ()
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["perlin_rough"].virtual_obstacle_keys = ()
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["perlin_rough_stand"].virtual_obstacle_keys = ()
+FOOTHOLD_MIXED_TERRAINS_CFG_PLAY = _play_cfg(FOOTHOLD_MIXED_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
 # Adam Lite parkour base (rough / stand / pyramid stairs + inv / pyramid slopes)

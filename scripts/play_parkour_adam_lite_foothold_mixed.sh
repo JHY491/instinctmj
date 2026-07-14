@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-Lite-Three-Slopes-Play-v0：三斜坡 play / 导出 ONNX。
+# Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0：SSR imagined foothold mixed (stairs+slope+gap) play / 导出 ONNX。
 #
 # 用法:
-#   ./scripts/play_parkour_adam_lite_three_slopes.sh --load-run <run>
-#   ./scripts/play_parkour_adam_lite_three_slopes.sh --viewer viser --load-run <run>
-#   ./scripts/play_parkour_adam_lite_three_slopes.sh --gpu 0 --load-run <run>
-#   ./scripts/play_parkour_adam_lite_three_slopes.sh --checkpoint logs/instinct_rl/adam_lite_slopes_parkour/<run>/model_10000.pt
-#   ./scripts/play_parkour_adam_lite_three_slopes.sh --load-run <run> --export-onnx
+#   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --load-run <run>
+#   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --viewer viser --load-run <run>
+#   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --gpu 0 --load-run <run>
+#   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --checkpoint logs/instinct_rl/adam_lite_foothold_mixed/<run>/model_10000.pt
+#   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --load-run <run> --export-onnx
 #
-# 日志根目录: logs/instinct_rl/adam_lite_slopes_parkour/
+# 日志根目录: logs/instinct_rl/adam_lite_foothold_mixed/
 #
 
 set -e
 
-TASK_ID="Instinct-Parkour-Adam-Lite-Three-Slopes-Play-v0"
+TASK_ID="Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CUDA_VISIBLE_DEVICES_VAL="${CUDA_VISIBLE_DEVICES:-}"

@@ -27,6 +27,19 @@ def foot_pos_b(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     return torch.cat(out, dim=-1)
 
 
+def link_pos_b_flat(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """选中 link 在 base 系位置，展平为 (N, 3K)。SSR critic 的 p^f / p^h。"""
+    asset: Entity = env.scene[asset_cfg.name]
+    ids = list(asset_cfg.body_ids)
+    root_pos = asset.data.root_link_pos_w
+    root_quat = asset.data.root_link_quat_w
+    out = []
+    for i in ids:
+        rel_w = asset.data.body_link_pos_w[:, i, :] - root_pos
+        out.append(quat_apply_inverse(root_quat, rel_w))
+    return torch.cat(out, dim=-1)
+
+
 def foot_sole_z(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg, foot_height_offset: float = 0.065) -> torch.Tensor:
     """两脚鞋底平面世界高度 (N,2)=[left,right]，与 feet_unsupported 一致。"""
     asset: Entity = env.scene[asset_cfg.name]
@@ -44,6 +57,17 @@ def foot_vel_b(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tenso
     for i in ids:
         vel_b = quat_apply_inverse(root_quat, asset.data.body_link_lin_vel_w[:, i, :])
         out.append(vel_b[:, :2])
+    return torch.cat(out, dim=-1)
+
+
+def link_lin_vel_b_flat(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """选中 link 在 base 系线速度，展平为 (N, 3K)。SSR critic 的 v^f。"""
+    asset: Entity = env.scene[asset_cfg.name]
+    ids = list(asset_cfg.body_ids)
+    root_quat = asset.data.root_link_quat_w
+    out = []
+    for i in ids:
+        out.append(quat_apply_inverse(root_quat, asset.data.body_link_lin_vel_w[:, i, :]))
     return torch.cat(out, dim=-1)
 
 
@@ -77,6 +101,47 @@ def terrain_level(env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = SceneEntit
     del asset_cfg
     level = env.scene.terrain.terrain_levels
     return level.unsqueeze(-1).float()
+
+
+def _column_subterrain_names(terrain_generator_cfg) -> list[str]:
+    """Map each terrain column index to its sub-terrain name (same rule as PoseVelocityCommand)."""
+    import numpy as np
+
+    sub_terrains = terrain_generator_cfg.sub_terrains
+    proportions = np.array([sub_cfg.proportion for sub_cfg in sub_terrains.values()], dtype=np.float64)
+    denom = float(np.sum(proportions))
+    if denom <= 0.0:
+        return [""] * int(terrain_generator_cfg.num_cols)
+    proportions = proportions / denom
+    names = list(sub_terrains.keys())
+    out: list[str] = []
+    num_cols = int(terrain_generator_cfg.num_cols)
+    for index in range(num_cols):
+        sub_index = int(np.min(np.where(index / num_cols + 0.001 < np.cumsum(proportions))[0]))
+        out.append(names[sub_index])
+    return out
+
+
+def foothold_guidance_active(
+    env: ManagerBasedRlEnv,
+    disable_terrain_names: tuple[str, ...] = ("continuous_slope",),
+) -> torch.Tensor:
+    """1 = apply SSR r^f；0 = force r^f=1（SSR：斜坡上关掉支撑缺失引导）。"""
+    terrain = env.scene.terrain
+    gen = terrain.cfg.terrain_generator
+    cache_key = "_foothold_guidance_active_by_col"
+    disable = frozenset(disable_terrain_names)
+    cached = getattr(env, cache_key, None)
+    if cached is None or cached.shape[0] != int(gen.num_cols):
+        col_names = _column_subterrain_names(gen)
+        active = torch.tensor(
+            [0.0 if name in disable else 1.0 for name in col_names],
+            device=env.device,
+            dtype=torch.float32,
+        )
+        setattr(env, cache_key, active)
+        cached = active
+    return cached[terrain.terrain_types].unsqueeze(-1)
 
 
 def foot_region_hit_z(env: ManagerBasedRlEnv, sensor_name: str, miss_value: float = -10.0) -> torch.Tensor:

@@ -64,8 +64,13 @@ def feet_on_pit_bottom(
     ground_contact_tolerance: float = 0.04,
     pit_ground_height_max: float = -0.04,
     contact_force_threshold: float = 1.0,
+    active_terrain_names: tuple[str, ...] | None = None,
 ) -> torch.Tensor:
-    """Terminate when a loaded foot supports on terrain below stake/plate height."""
+    """Terminate when a loaded foot supports on terrain below stake/plate height.
+
+    If ``active_terrain_names`` is set, only envs whose current sub-terrain name is in
+    that set can terminate (avoids false positives on stairs/slopes in mixed curricula).
+    """
     asset: Entity = env.scene[asset_cfg.name]
     contact_sensor: ContactSensor = env.scene[contact_sensor_name]
     is_contact = (
@@ -97,7 +102,22 @@ def feet_on_pit_bottom(
 
     left_fail = is_contact[:, 0:1] & left_pit.any(dim=-1, keepdim=True)
     right_fail = is_contact[:, 1:2] & right_pit.any(dim=-1, keepdim=True)
-    return torch.any(left_fail | right_fail, dim=1)
+    fail = torch.any(left_fail | right_fail, dim=1)
+
+    if active_terrain_names is not None:
+        from instinct_mj.tasks.parkour.mdp.foothold_obs import _column_subterrain_names
+
+        terrain = env.scene.terrain
+        col_names = _column_subterrain_names(terrain.cfg.terrain_generator)
+        allow = frozenset(active_terrain_names)
+        active_by_col = torch.tensor(
+            [name in allow for name in col_names],
+            device=env.device,
+            dtype=torch.bool,
+        )
+        fail = fail & active_by_col[terrain.terrain_types]
+
+    return fail
 
 
 def illegal_contact(

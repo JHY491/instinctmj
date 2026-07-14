@@ -10,6 +10,9 @@ from .foothold_obs import (
     foot_region_hit_z,
     foot_sole_z,
     foot_vel_b,
+    foothold_guidance_active,
+    link_lin_vel_b_flat,
+    link_pos_b_flat,
     terrain_level,
 )
 from .commands import *  # noqa: F401, F403

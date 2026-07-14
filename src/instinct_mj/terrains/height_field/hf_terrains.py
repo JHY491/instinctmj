@@ -1914,6 +1914,70 @@ def perlin_square_gap_terrain(difficulty: float, cfg: hf_terrains_cfg.PerlinSqua
 
 @generate_wall
 @height_field_to_mesh
+def perlin_continuous_box_gap_terrain(
+    difficulty: float, cfg: hf_terrains_cfg.PerlinContinuousBoxGapTerrainCfg
+) -> np.ndarray:
+    """Generate continuous box platforms separated by gaps along travel (+x).
+
+    Tile is filled as a pit; walkable boxes (entry / mid boxes / exit) are raised
+    to z=0 along a centered lateral corridor. Gap width scales with difficulty.
+    """
+    gap_m = cfg.gap_distance_range[0] + difficulty * (
+        cfg.gap_distance_range[1] - cfg.gap_distance_range[0]
+    )
+    gap_depth = float(np.random.uniform(cfg.gap_depth[0], cfg.gap_depth[1]))
+    gap_value = -round(gap_depth / cfg.vertical_scale)
+
+    hs = cfg.horizontal_scale
+    ny = int(cfg.size[1] / hs)
+    nx = int(cfg.size[0] / hs)
+    hf_raw = np.full((ny, nx), float(gap_value), dtype=np.float64)
+
+    platform_length = float(cfg.platform_length)
+    box_length = float(cfg.box_length)
+    num_boxes = int(cfg.num_boxes)
+    num_gaps = num_boxes + 1
+    total = 2.0 * platform_length + num_boxes * box_length + num_gaps * gap_m
+    if total > float(cfg.size[0]) and num_boxes > 0:
+        shrink = total - float(cfg.size[0])
+        box_length = max(hs, box_length - shrink / float(num_boxes))
+        total = 2.0 * platform_length + num_boxes * box_length + num_gaps * gap_m
+
+    x0 = 0.5 * (float(cfg.size[0]) - total)
+    y0 = 0.5 * (float(cfg.size[1]) - float(cfg.platform_width))
+    y1 = y0 + float(cfg.platform_width)
+    iy0 = max(0, int(round(y0 / hs)))
+    iy1 = min(ny, int(round(y1 / hs)))
+
+    def raise_platform(x_start_m: float, x_end_m: float) -> None:
+        ix0 = max(0, int(round(x_start_m / hs)))
+        ix1 = min(nx, int(round(x_end_m / hs)))
+        if ix1 > ix0 and iy1 > iy0:
+            hf_raw[iy0:iy1, ix0:ix1] = 0.0
+
+    cursor = x0
+    raise_platform(cursor, cursor + platform_length)
+    cursor += platform_length
+    for _ in range(num_boxes):
+        cursor += gap_m
+        raise_platform(cursor, cursor + box_length)
+        cursor += box_length
+    cursor += gap_m
+    raise_platform(cursor, cursor + platform_length)
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        hf_raw += generate_perlin_noise(difficulty, perlin_cfg)  # type: ignore[arg-type]
+
+    return np.rint(hf_raw).astype(np.int16)
+
+
+@generate_wall
+@height_field_to_mesh
 def perlin_continuous_slope_terrain(difficulty: float, cfg: hf_terrains_cfg.PerlinContinuousSlopeTerrainCfg) -> np.ndarray:
     """Generate a terrain with two consecutive slope humps (double hump).
 

@@ -154,6 +154,7 @@ class InstinctRlMoEActorCriticCfg(InstinctRlActorCriticCfg):
     class_name: str = "MoEActorCritic"
     num_moe_experts: int | None = 8
     moe_gate_hidden_dims: tuple[int, ...] | None = ()
+    moe_on_critic: bool | None = True
 
 
 @dataclass
@@ -189,6 +190,7 @@ class InstinctRlEncoderMoEActorCriticCfg(InstinctRlActorCriticCfg):
     class_name: str = "EncoderMoEActorCritic"
     num_moe_experts: int | None = 8
     moe_gate_hidden_dims: tuple[int, ...] | None = ()
+    moe_on_critic: bool | None = True
 
 
 @dataclass
@@ -251,6 +253,16 @@ class EncoderVelActorCriticCfg(InstinctRlEncoderActorCriticCfg):
 
 
 @dataclass
+class EncoderVelMoEActorCriticCfg(EncoderVelActorCriticCfg):
+    """Encoder + velocity estimator + MoE actor (EncoderVelMoEActorCritic)."""
+
+    class_name: str = "EncoderVelMoEActorCritic"
+    num_moe_experts: int | None = 4
+    moe_gate_hidden_dims: tuple[int, ...] | None = ()
+    moe_on_critic: bool | None = False
+
+
+@dataclass
 class EstimatorWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
     """WasabiPPO with estimator supervision loss."""
 
@@ -277,3 +289,5 @@ class FootholdWasabiPpoAlgorithmCfg(InstinctRlPpoAlgorithmCfg):
     imagination_hidden_sizes: tuple[int, ...] = (256, 128)
     imagination_lr: float = 5.0e-4
     foothold_reward_coef: float = 0.25
+    # SSR: on continuous slopes force rho_tilde=0 → r^f=1 (see FootholdAlgoMixin).
+    disable_foothold_guidance: bool = False

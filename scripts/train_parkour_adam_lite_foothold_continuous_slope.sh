@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-v0 训练脚本
-# SSR imagined foothold guidance + AMP + cross-step recurrent depth+proprio GRU encoder.
+# Instinct-Parkour-Adam-Lite-Foothold-ContinuousSlope-v0 训练脚本
+# SSR imagined foothold guidance + AMP + 10-frame depth vision.
 #
 # 用法:
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --gpu 0
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh -n 4096
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh -n 2048 -b
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --gpu 0,1 -n 4096
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --gpu-ids "[0,1]"
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --num-envs 8192 --background
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --gpu 0
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh -n 4096
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh -n 2048 -b
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --gpu 0,1 -n 4096
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --gpu-ids "[0,1]"
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --num-envs 8192 --background
 #
 # 断点续训:
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --resume --load-run 2026-06-08_12-00-00 --checkpoint model_10000.pt
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --checkpoint logs/instinct_rl/adam_lite_foothold_gru_recurrent/2026-06-08_12-00-00/model_10000.pt
-#   ./scripts/train_parkour_adam_lite_foothold_gru_recurrent.sh --resume logs/instinct_rl/adam_lite_foothold_gru_recurrent/2026-06-08_12-00-00/model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --resume --load-run 2026-06-08_12-00-00 --checkpoint model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --checkpoint logs/instinct_rl/adam_lite_foothold_continuous_slope/2026-06-08_12-00-00/model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_continuous_slope.sh --resume logs/instinct_rl/adam_lite_foothold_continuous_slope/2026-06-08_12-00-00/model_10000.pt
 #
 
 set -e
 
-TASK_ID="Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-v0"
+TASK_ID="Instinct-Parkour-Adam-Lite-Foothold-ContinuousSlope-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs/instinct_rl"
@@ -97,7 +97,7 @@ TRAIN_CMD+=("${EXTRA_ARGS[@]}")
 
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-LOG_FILE="${LOG_DIR}/train_parkour_adam_lite_foothold_gru_recurrent_${TIMESTAMP}.log"
+LOG_FILE="${LOG_DIR}/train_parkour_adam_lite_foothold_continuous_slope_${TIMESTAMP}.log"
 
 filter_output() {
   grep --line-buffered -vE \

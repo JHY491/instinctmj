@@ -5,6 +5,7 @@ from .hf_terrains_cfg import (
     PerlinCrossStoneTerrainCfg,
     PerlinChainedStraightBridgeTerrainCfg,
     PerlinCurvedBridgeTerrainCfg,
+    PerlinContinuousBoxGapTerrainCfg,
     PerlinContinuousHurdleTerrainCfg,
     PerlinNarrowLCornerTerrainCfg,
     PerlinSlalomPoleTerrainCfg,

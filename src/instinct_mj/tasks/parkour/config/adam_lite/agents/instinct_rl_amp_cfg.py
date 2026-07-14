@@ -9,14 +9,12 @@ from instinct_mj.rl import (
     EncoderTerrainActorCriticCfg,
     EncoderTerrainVelActorCriticCfg,
     EncoderVelActorCriticCfg,
+    EncoderVelMoEActorCriticCfg,
     EstimatorWasabiPpoAlgorithmCfg,
     FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
     InstinctRlConv2dHeadCfg,
-    InstinctRlDepthProprioGruEncoderCfg,
-    InstinctRlDepthProprioRecurrentGruEncoderCfg,
     InstinctRlEncoderActorCriticCfg,
-    InstinctRlEncoderRecurrentActorCriticCfg,
     InstinctRlEncoderMoEActorCriticCfg,
     InstinctRlNormalizerCfg,
     InstinctRlOnPolicyRunnerCfg,
@@ -67,6 +65,8 @@ class PolicyCfg(EncoderTerrainActorCriticCfg):
 
 @dataclass(kw_only=True)
 class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
+    """楼梯 foothold: depth encoder on actor only; critic uses SSR privileged heightmaps."""
+
     init_noise_std: float = 1.0
     actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
@@ -74,9 +74,8 @@ class FootholdVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
     encoder_configs: dict[str, Any] | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
     )
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
-    )
+    # SSR asymmetric critic: privileged H^b/H^f + limb state, no depth encoder.
+    critic_encoder_configs: dict[str, Any] | str | None = None
 
 
 @dataclass(kw_only=True)
@@ -103,8 +102,39 @@ class DepthEncoderDeepCfg(InstinctRlConv2dHeadCfg):
 
 
 @dataclass(kw_only=True)
+class FootholdMixedDeepMoEPolicyCfg(EncoderVelMoEActorCriticCfg):
+    """Mixed = VelEst-DeepCNN + MoE×4 actor; critic = SSR privileged MLP (no depth)."""
+
+    init_noise_std: float = 1.0
+    num_moe_experts: int = 4
+    moe_gate_hidden_dims: tuple[int, ...] = ()
+    moe_on_critic: bool = False
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = None
+    vel_estimator_obs_components: list[str] = field(
+        default_factory=lambda: [
+            "base_ang_vel",
+            "projected_gravity",
+            "velocity_commands",
+            "joint_pos",
+            "joint_vel",
+            "actions",
+        ]
+    )
+    vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel_est"])
+    vel_estimator_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [512, 256, 128], "nonlinearity": "ReLU"}
+    )
+
+
+@dataclass(kw_only=True)
 class FootholdVelEstDeepVisionPolicyCfg(EncoderVelActorCriticCfg):
-    """VelEst + SSR 对齐的深度 CNN (无 GRU)。"""
+    """VelEst + SSR 对齐深度 CNN（actor）；critic 用 privileged heightmap。"""
     init_noise_std: float = 1.0
     actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
     critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
@@ -112,9 +142,7 @@ class FootholdVelEstDeepVisionPolicyCfg(EncoderVelActorCriticCfg):
     encoder_configs: dict[str, Any] | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
     )
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
-    )
+    critic_encoder_configs: dict[str, Any] | str | None = None
     vel_estimator_obs_components: list[str] = field(
         default_factory=lambda: [
             "base_ang_vel",
@@ -140,9 +168,7 @@ class FootholdVelEstVisionPolicyCfg(EncoderVelActorCriticCfg):
     encoder_configs: dict[str, Any] | None = field(
         default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
     )
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
-    )
+    critic_encoder_configs: dict[str, Any] | str | None = None
     vel_estimator_obs_components: list[str] = field(
         default_factory=lambda: [
             "base_ang_vel",
@@ -156,20 +182,6 @@ class FootholdVelEstVisionPolicyCfg(EncoderVelActorCriticCfg):
     vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel_est"])
     vel_estimator_configs: dict[str, Any] = field(
         default_factory=lambda: {"hidden_sizes": [512, 256, 128], "nonlinearity": "ReLU"}
-    )
-
-
-@dataclass(kw_only=True)
-class FootholdGruVisionPolicyCfg(InstinctRlEncoderActorCriticCfg):
-    init_noise_std: float = 1.0
-    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
-    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
-    activation: str = "elu"
-    encoder_configs: dict[str, Any] | None = field(
-        default_factory=lambda: {"depth_proprio_gru": InstinctRlDepthProprioGruEncoderCfg()}
-    )
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
     )
 
 
@@ -315,6 +327,29 @@ class FootholdVelEstAmpAlgoCfg(FootholdAmpAlgoCfg):
 
 
 @dataclass(kw_only=True)
+class FootholdContinuousSlopeAmpAlgoCfg(FootholdAmpAlgoCfg):
+    """Continuous slope only: SSR disables foothold guidance globally."""
+
+    disable_foothold_guidance: bool = True
+
+
+@dataclass(kw_only=True)
+class FootholdSquareGapsAmpAlgoCfg(FootholdAmpAlgoCfg):
+    """Square gaps only: enable r^f from terrain level 3."""
+
+    terrain_level_gate: int = 3
+    disable_foothold_guidance: bool = False
+
+
+@dataclass(kw_only=True)
+class FootholdMixedAmpAlgoCfg(FootholdVelEstAmpAlgoCfg):
+    """Mixed = VelEst-Deep training algo + per-env slope r^f mask + gap gate=3."""
+
+    terrain_level_gate: int = 3
+    disable_foothold_guidance: bool = False
+
+
+@dataclass(kw_only=True)
 class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     num_steps_per_env: int = 24
     policy_observation_group: str = "policy"
@@ -423,36 +458,36 @@ def adam_lite_foothold_velest_deep_amp_runner_cfg() -> InstinctRlOnPolicyRunnerC
 
 
 @dataclass(kw_only=True)
-class AdamLiteFootholdGruVisionAmpRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
-    experiment_name: str = "adam_lite_foothold_gru"
-    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdGruVisionPolicyCfg())
+class AdamLiteFootholdContinuousSlopeRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_continuous_slope"
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdContinuousSlopeAmpAlgoCfg())
 
 
-def adam_lite_foothold_gru_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """Foothold GRU 任务 runner（depth CNN + proprio GRU encoder）。"""
-    return AdamLiteFootholdGruVisionAmpRunnerCfg()
-
-
-@dataclass(kw_only=True)
-class FootholdRecurrentGruVisionPolicyCfg(InstinctRlEncoderRecurrentActorCriticCfg):
-    init_noise_std: float = 1.0
-    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
-    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
-    activation: str = "elu"
-    encoder_configs: dict[str, Any] | None = field(
-        default_factory=lambda: {"depth_proprio_recurrent_gru": InstinctRlDepthProprioRecurrentGruEncoderCfg()}
-    )
-    critic_encoder_configs: dict[str, Any] | str | None = field(
-        default_factory=lambda: {"depth_encoder": DepthEncoderConv2dCfg()}
-    )
+def adam_lite_foothold_continuous_slope_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold continuous-slope runner（r^f disabled per SSR）。"""
+    return AdamLiteFootholdContinuousSlopeRunnerCfg()
 
 
 @dataclass(kw_only=True)
-class AdamLiteFootholdRecurrentGruVisionAmpRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
-    experiment_name: str = "adam_lite_foothold_gru_recurrent"
-    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdRecurrentGruVisionPolicyCfg())
+class AdamLiteFootholdSquareGapsRunnerCfg(AdamLiteFootholdParkourRunnerCfg):
+    experiment_name: str = "adam_lite_foothold_square_gaps"
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdSquareGapsAmpAlgoCfg())
 
 
-def adam_lite_foothold_recurrent_gru_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """Foothold recurrent GRU 任务 runner（cross-step depth+proprio GRU encoder）。"""
-    return AdamLiteFootholdRecurrentGruVisionAmpRunnerCfg()
+def adam_lite_foothold_square_gaps_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold square-gaps runner（r^f active, terrain_level_gate=3）。"""
+    return AdamLiteFootholdSquareGapsRunnerCfg()
+
+
+@dataclass(kw_only=True)
+class AdamLiteFootholdMixedRunnerCfg(AdamLiteFootholdVelEstDeepRunnerCfg):
+    """VelEst-DeepCNN training stack; only experiment/policy/algo differ for mixed terrain."""
+
+    experiment_name: str = "adam_lite_foothold_mixed"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdMixedDeepMoEPolicyCfg())
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdMixedAmpAlgoCfg())
+
+
+def adam_lite_foothold_mixed_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
+    """Foothold mixed = VelEst-DeepCNN + MoE×4 actor; terrain is the only env difference."""
+    return AdamLiteFootholdMixedRunnerCfg()

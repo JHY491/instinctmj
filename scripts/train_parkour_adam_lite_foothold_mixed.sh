@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-Lite-Plum-Blossom-v0 训练脚本
-# 梅花桩踏石 + AMP + 深度视觉。
+# Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0
+# Same stack as Foothold-VelEst-DeepCNN (DeepCNN + VelEst + FootholdWasabiEstimatorPPO),
+# with MoE×4 actor and mixed terrain only.
 #
 # 用法:
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --gpu 0
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh -n 4096
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh -n 2048 -b
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --gpu 0,1 -n 4096
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --gpu-ids "[0,1]"
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --num-envs 8192 --background
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --gpu 0
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh -n 4096
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh -n 2048 -b
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --gpu 0,1 -n 4096
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --gpu-ids "[0,1]"
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --num-envs 8192 --background
 #
 # 断点续训:
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --resume --load-run 2026-06-08_12-00-00 --checkpoint model_10000.pt
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --checkpoint logs/instinct_rl/adam_lite_plum_blossom_parkour/2026-06-08_12-00-00/model_10000.pt
-#   ./scripts/train_parkour_adam_lite_plum_blossom.sh --resume logs/instinct_rl/adam_lite_plum_blossom_parkour/2026-06-08_12-00-00/model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --resume --load-run 2026-06-08_12-00-00 --checkpoint model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --checkpoint logs/instinct_rl/adam_lite_foothold_mixed/2026-06-08_12-00-00/model_10000.pt
+#   ./scripts/train_parkour_adam_lite_foothold_mixed.sh --resume logs/instinct_rl/adam_lite_foothold_mixed/2026-06-08_12-00-00/model_10000.pt
 #
 
 set -e
 
-TASK_ID="Instinct-Parkour-Adam-Lite-Plum-Blossom-v0"
+TASK_ID="Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs/instinct_rl"
@@ -97,7 +98,7 @@ TRAIN_CMD+=("${EXTRA_ARGS[@]}")
 
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-LOG_FILE="${LOG_DIR}/train_parkour_adam_lite_plum_blossom_${TIMESTAMP}.log"
+LOG_FILE="${LOG_DIR}/train_parkour_adam_lite_foothold_mixed_${TIMESTAMP}.log"
 
 filter_output() {
   grep --line-buffered -vE \

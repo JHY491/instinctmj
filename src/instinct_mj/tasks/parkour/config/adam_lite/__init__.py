@@ -216,58 +216,6 @@ register_instinct_task(
 )
 
 
-def _foothold_gru_parkour_cfg(play: bool):
-  from .adam_lite_foothold_gru_parkour_cfg import instinct_adam_lite_foothold_gru_final_cfg
-  return instinct_adam_lite_foothold_gru_final_cfg(play=play)
-
-
-def _foothold_gru_runner_cfg():
-  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_gru_amp_runner_cfg
-  return adam_lite_foothold_gru_amp_runner_cfg()
-
-
-register_instinct_task(
-  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-v0",
-  env_cfg_factory=lambda: _foothold_gru_parkour_cfg(play=False),
-  play_env_cfg_factory=lambda: _foothold_gru_parkour_cfg(play=True),
-  instinct_rl_cfg_factory=_foothold_gru_runner_cfg,
-)
-
-
-register_instinct_task(
-  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-Play-v0",
-  env_cfg_factory=lambda: _foothold_gru_parkour_cfg(play=True),
-  play_env_cfg_factory=lambda: _foothold_gru_parkour_cfg(play=True),
-  instinct_rl_cfg_factory=_foothold_gru_runner_cfg,
-)
-
-
-def _foothold_recurrent_gru_parkour_cfg(play: bool):
-  from .adam_lite_foothold_recurrent_gru_parkour_cfg import instinct_adam_lite_foothold_recurrent_gru_final_cfg
-  return instinct_adam_lite_foothold_recurrent_gru_final_cfg(play=play)
-
-
-def _foothold_recurrent_gru_runner_cfg():
-  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_recurrent_gru_amp_runner_cfg
-  return adam_lite_foothold_recurrent_gru_amp_runner_cfg()
-
-
-register_instinct_task(
-  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-v0",
-  env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=False),
-  play_env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
-  instinct_rl_cfg_factory=_foothold_recurrent_gru_runner_cfg,
-)
-
-
-register_instinct_task(
-  task_id="Instinct-Parkour-Adam-Lite-Foothold-GRU-Recurrent-Play-v0",
-  env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
-  play_env_cfg_factory=lambda: _foothold_recurrent_gru_parkour_cfg(play=True),
-  instinct_rl_cfg_factory=_foothold_recurrent_gru_runner_cfg,
-)
-
-
 def _foothold_velest_deep_env_cfg(play: bool):
   from .adam_lite_foothold_parkour_cfg import instinct_adam_lite_foothold_deep_final_cfg
   return instinct_adam_lite_foothold_deep_final_cfg(play=play)
@@ -291,4 +239,86 @@ register_instinct_task(
   env_cfg_factory=lambda: _foothold_velest_deep_env_cfg(play=True),
   play_env_cfg_factory=lambda: _foothold_velest_deep_env_cfg(play=True),
   instinct_rl_cfg_factory=_foothold_velest_deep_runner_cfg,
+)
+
+
+def _foothold_continuous_slope_cfg(play: bool):
+  from .adam_lite_foothold_continuous_slope_parkour_cfg import (
+    instinct_adam_lite_foothold_continuous_slope_final_cfg,
+  )
+  return instinct_adam_lite_foothold_continuous_slope_final_cfg(play=play)
+
+
+def _foothold_continuous_slope_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_continuous_slope_amp_runner_cfg
+  return adam_lite_foothold_continuous_slope_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-ContinuousSlope-v0",
+  env_cfg_factory=lambda: _foothold_continuous_slope_cfg(play=False),
+  play_env_cfg_factory=lambda: _foothold_continuous_slope_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_continuous_slope_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-ContinuousSlope-Play-v0",
+  env_cfg_factory=lambda: _foothold_continuous_slope_cfg(play=True),
+  play_env_cfg_factory=lambda: _foothold_continuous_slope_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_continuous_slope_runner_cfg,
+)
+
+
+def _foothold_square_gaps_cfg(play: bool):
+  from .adam_lite_foothold_square_gaps_parkour_cfg import (
+    instinct_adam_lite_foothold_square_gaps_final_cfg,
+  )
+  return instinct_adam_lite_foothold_square_gaps_final_cfg(play=play)
+
+
+def _foothold_square_gaps_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_square_gaps_amp_runner_cfg
+  return adam_lite_foothold_square_gaps_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-SquareGaps-v0",
+  env_cfg_factory=lambda: _foothold_square_gaps_cfg(play=False),
+  play_env_cfg_factory=lambda: _foothold_square_gaps_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_square_gaps_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-SquareGaps-Play-v0",
+  env_cfg_factory=lambda: _foothold_square_gaps_cfg(play=True),
+  play_env_cfg_factory=lambda: _foothold_square_gaps_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_square_gaps_runner_cfg,
+)
+
+
+def _foothold_mixed_cfg(play: bool):
+  from .adam_lite_foothold_mixed_parkour_cfg import instinct_adam_lite_foothold_mixed_final_cfg
+  return instinct_adam_lite_foothold_mixed_final_cfg(play=play)
+
+
+def _foothold_mixed_runner_cfg():
+  from .agents.instinct_rl_amp_cfg import adam_lite_foothold_mixed_amp_runner_cfg
+  return adam_lite_foothold_mixed_amp_runner_cfg()
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0",
+  env_cfg_factory=lambda: _foothold_mixed_cfg(play=False),
+  play_env_cfg_factory=lambda: _foothold_mixed_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_mixed_runner_cfg,
+)
+
+
+register_instinct_task(
+  task_id="Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0",
+  env_cfg_factory=lambda: _foothold_mixed_cfg(play=True),
+  play_env_cfg_factory=lambda: _foothold_mixed_cfg(play=True),
+  instinct_rl_cfg_factory=_foothold_mixed_runner_cfg,
 )
