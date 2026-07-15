@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0：SSR imagined foothold mixed (stairs+slope+gap) play / 导出 ONNX。
+# Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0：与 VelEst-DeepCNN 同栈，mixed 地形 play / 导出 ONNX。
 #
 # 用法:
 #   ./scripts/play_parkour_adam_lite_foothold_mixed.sh --load-run <run>

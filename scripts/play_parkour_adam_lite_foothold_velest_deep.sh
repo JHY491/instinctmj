@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #
 # Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-Play-v0 play / ONNX export script.
+#
+# 用法:
+#   ./scripts/play_parkour_adam_lite_foothold_velest_deep.sh --load_run logs/instinct_rl/adam_lite_foothold_velest_deepcnn/<run>/model_15000.pt
+#   ./scripts/play_parkour_adam_lite_foothold_velest_deep.sh --checkpoint logs/instinct_rl/adam_lite_foothold_velest_deepcnn/<run>/model_15000.pt --gpu 1
+#
 
 set -e
 
@@ -18,6 +23,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --checkpoint|--pt)
       EXTRA_ARGS+=("--checkpoint-file" "$2")
+      shift 2
+      ;;
+    --load_run|--load-run)
+      EXTRA_ARGS+=("--load_run" "$2")
       shift 2
       ;;
     --export-onnx)

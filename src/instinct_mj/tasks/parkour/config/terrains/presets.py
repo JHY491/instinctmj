@@ -1303,8 +1303,8 @@ SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["perlin_rough_stand"].virtual_obstacl
 SQUARE_GAPS_ONLY_TERRAINS_CFG_PLAY = _play_cfg(SQUARE_GAPS_ONLY_TERRAINS_CFG)
 
 # ---------------------------------------------------------------------------
-# Foothold mixed: stairs + continuous_slope + continuous_box_gaps (+ flat)
-# SSR: r^f active on stairs/gaps; disabled on continuous_slope (see foothold_guidance_active).
+# Foothold mixed: stairs + continuous_slope + continuous_box_gaps + continuous_hurdle (+ flat)
+# SSR: r^f active on stairs/gaps/hurdle; disabled on continuous_slope (see foothold_guidance_active).
 # ---------------------------------------------------------------------------
 
 FOOTHOLD_MIXED_TERRAINS_CFG = FiledTerrainGeneratorCfg(
@@ -1370,18 +1370,45 @@ FOOTHOLD_MIXED_TERRAINS_CFG = FiledTerrainGeneratorCfg(
             SQUARE_GAPS_ONLY_TERRAINS_CFG.sub_terrains["continuous_box_gaps"]
         ),
         "one_sided_stairs": copy.deepcopy(STAIRS_ONLY_TERRAINS_CFG.sub_terrains["one_sided_stairs"]),
+        "continuous_hurdle": PerlinContinuousHurdleTerrainCfg(
+            proportion=0.10,
+            num_hurdles=5,
+            hurdle_width=2.4,
+            hurdle_height=0.3,
+            hurdle_height_range=(0.05, 0.30),
+            hurdle_thickness=0.05,
+            hurdle_spacing=1.1,
+            hurdle_spacing_range=(1.5, 1.0),
+            perlin_cfg=copy.deepcopy(_BASE_LIGHT_PERLIN_CFG),
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            virtual_obstacle_keys=("hurdle_edges",),
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(7.5, 7.5),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
     },
 )
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].proportion = 0.10
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_box_gaps"].proportion = 0.25
-FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["one_sided_stairs"].proportion = 0.45
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["one_sided_stairs"].proportion = 0.35
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_hurdle"].proportion = 0.10
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].perlin_cfg = copy.deepcopy(
     _BASE_LIGHT_PERLIN_CFG
 )
-# Selective virtual edges: stairs/gaps only. Slopes and planes must stay empty
-# (smooth surfaces must not get edge-cylinder virtual obstacles).
+# Selective virtual edges: stairs/gaps → edges; hurdle → hurdle_edges.
+# Slopes and planes must stay empty (smooth surfaces must not get edge cylinders).
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["one_sided_stairs"].virtual_obstacle_keys = ("edges",)
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_box_gaps"].virtual_obstacle_keys = ("edges",)
+FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_hurdle"].virtual_obstacle_keys = ("hurdle_edges",)
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["continuous_slope"].virtual_obstacle_keys = ()
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["perlin_rough"].virtual_obstacle_keys = ()
 FOOTHOLD_MIXED_TERRAINS_CFG.sub_terrains["perlin_rough_stand"].virtual_obstacle_keys = ()

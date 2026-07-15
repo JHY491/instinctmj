@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0
-# Same stack as Foothold-VelEst-DeepCNN (DeepCNN + VelEst + FootholdWasabiEstimatorPPO),
-# with MoE×4 actor and mixed terrain only.
+# Same stack as Foothold-VelEst-DeepCNN (DeepCNN + VelEst + SSR privileged critic),
+# mixed terrain only.
 #
 # 用法:
 #   ./scripts/train_parkour_adam_lite_foothold_mixed.sh

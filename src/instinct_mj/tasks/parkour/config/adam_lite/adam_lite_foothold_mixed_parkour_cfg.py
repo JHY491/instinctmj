@@ -1,4 +1,4 @@
-"""Adam Lite foothold mixed: VelEst-DeepCNN env stack + mixed terrain only."""
+"""Adam Lite foothold mixed: VelEst-DeepCNN 最新 SSR obs 栈 + mixed 地形。"""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from instinct_mj.tasks.parkour.config.parkour_env_cfg import (
 )
 from instinct_mj.tasks.parkour.mdp.commands import PoseVelocityCommandCfg
 from instinct_mj.terrains.virtual_obstacle.edge_cylinder_cfg import GreedyconcatEdgeCylinderCfg
-
 
 _FOOTHOLD_MIXED_VELOCITY_RANGES = {
     "perlin_rough_stand": {
@@ -47,11 +46,16 @@ _FOOTHOLD_MIXED_VELOCITY_RANGES = {
         "lin_vel_y": (0.0, 0.0),
         "ang_vel_z": (-0.5, 0.5),
     },
+    "continuous_hurdle": {
+        "lin_vel_x": (0.3, 1.0),
+        "lin_vel_y": (0.0, 0.0),
+        "ang_vel_z": (-0.5, 0.5),
+    },
 }
 
 
 def instinct_adam_lite_foothold_mixed_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
-    """Same as VelEst-DeepCNN env (incl. base_lin_vel_est); only terrain/commands/pit differ."""
+    """与 VelEst-DeepCNN 同栈（SSR privileged critic + VelEst）；仅地形/指令/掉沟终止不同。"""
     cfg = instinct_adam_lite_foothold_velest_env_cfg(play=play)
     setattr(cfg, "run_name", "AdamLiteFootholdMixed")
 
@@ -62,6 +66,14 @@ def instinct_adam_lite_foothold_mixed_env_cfg(*, play: bool = False) -> ManagerB
     if not play:
         virtual_obstacles["edges"] = GreedyconcatEdgeCylinderCfg(
             cylinder_radius=0.03,
+            min_points=2,
+            component_workers=0,
+            merge_collinear_gap=0.09,
+            merge_collinear_angle_threshold=30.0,
+            merge_collinear_line_distance=0.04,
+        )
+        virtual_obstacles["hurdle_edges"] = GreedyconcatEdgeCylinderCfg(
+            cylinder_radius=0.05,
             min_points=2,
             component_workers=0,
             merge_collinear_gap=0.09,
