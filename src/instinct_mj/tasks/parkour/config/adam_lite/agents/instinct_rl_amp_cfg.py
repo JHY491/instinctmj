@@ -9,6 +9,7 @@ from instinct_mj.rl import (
     EncoderTerrainActorCriticCfg,
     EncoderTerrainVelActorCriticCfg,
     EncoderVelActorCriticCfg,
+    EncoderVelMoEActorCriticCfg,
     EstimatorWasabiPpoAlgorithmCfg,
     FootholdWasabiPpoAlgorithmCfg,
     InstinctRlActorCriticCfg,
@@ -98,6 +99,37 @@ class DepthEncoderDeepCfg(InstinctRlConv2dHeadCfg):
         ]
     )
     takeout_input_components: bool = True
+
+
+@dataclass(kw_only=True)
+class FootholdMixedDeepMoEPolicyCfg(EncoderVelMoEActorCriticCfg):
+    """Mixed = VelEst-DeepCNN + MoE×4 actor; critic = SSR privileged MLP (no depth)."""
+
+    init_noise_std: float = 1.0
+    num_moe_experts: int = 4
+    moe_gate_hidden_dims: tuple[int, ...] = ()
+    moe_on_critic: bool = False
+    actor_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    critic_hidden_dims: tuple[int, ...] = (512, 512, 256, 128)
+    activation: str = "elu"
+    encoder_configs: dict[str, Any] | None = field(
+        default_factory=lambda: {"depth_encoder": DepthEncoderDeepCfg()}
+    )
+    critic_encoder_configs: dict[str, Any] | str | None = None
+    vel_estimator_obs_components: list[str] = field(
+        default_factory=lambda: [
+            "base_ang_vel",
+            "projected_gravity",
+            "velocity_commands",
+            "joint_pos",
+            "joint_vel",
+            "actions",
+        ]
+    )
+    vel_target_components: list[str] = field(default_factory=lambda: ["base_lin_vel_est"])
+    vel_estimator_configs: dict[str, Any] = field(
+        default_factory=lambda: {"hidden_sizes": [512, 256, 128], "nonlinearity": "ReLU"}
+    )
 
 
 @dataclass(kw_only=True)
@@ -310,6 +342,14 @@ class FootholdSquareGapsAmpAlgoCfg(FootholdAmpAlgoCfg):
 
 
 @dataclass(kw_only=True)
+class FootholdMixedAmpAlgoCfg(FootholdVelEstAmpAlgoCfg):
+    """Mixed = VelEst-Deep training algo + per-env slope r^f mask + gap gate=5."""
+
+    terrain_level_gate: int = 5
+    disable_foothold_guidance: bool = False
+
+
+@dataclass(kw_only=True)
 class AdamSPParkourVisionAmpRunnerCfg(InstinctRlOnPolicyRunnerCfg):
     num_steps_per_env: int = 24
     policy_observation_group: str = "policy"
@@ -441,11 +481,13 @@ def adam_lite_foothold_square_gaps_amp_runner_cfg() -> InstinctRlOnPolicyRunnerC
 
 @dataclass(kw_only=True)
 class AdamLiteFootholdMixedRunnerCfg(AdamLiteFootholdVelEstDeepRunnerCfg):
-    """与 VelEst-DeepCNN 同 policy/algo；仅 experiment_name / 地形不同。"""
+    """VelEst-DeepCNN training stack; only experiment/policy/algo differ for mixed terrain."""
 
     experiment_name: str = "adam_lite_foothold_mixed"
+    policy: InstinctRlActorCriticCfg = field(default_factory=lambda: FootholdMixedDeepMoEPolicyCfg())
+    algorithm: InstinctRlPpoAlgorithmCfg = field(default_factory=lambda: FootholdMixedAmpAlgoCfg())
 
 
 def adam_lite_foothold_mixed_amp_runner_cfg() -> InstinctRlOnPolicyRunnerCfg:
-    """Foothold mixed = VelEst-DeepCNN 栈 + mixed 地形。"""
+    """Foothold mixed = VelEst-DeepCNN + MoE×4 actor; terrain is the only env difference."""
     return AdamLiteFootholdMixedRunnerCfg()
