@@ -46,11 +46,6 @@ _FOOTHOLD_MIXED_VELOCITY_RANGES = {
         "lin_vel_y": (0.0, 0.0),
         "ang_vel_z": (-0.5, 0.5),
     },
-    "continuous_hurdle": {
-        "lin_vel_x": (0.3, 1.0),
-        "lin_vel_y": (0.0, 0.0),
-        "ang_vel_z": (-0.5, 0.5),
-    },
 }
 
 
@@ -66,14 +61,6 @@ def instinct_adam_lite_foothold_mixed_env_cfg(*, play: bool = False) -> ManagerB
     if not play:
         virtual_obstacles["edges"] = GreedyconcatEdgeCylinderCfg(
             cylinder_radius=0.03,
-            min_points=2,
-            component_workers=0,
-            merge_collinear_gap=0.09,
-            merge_collinear_angle_threshold=30.0,
-            merge_collinear_line_distance=0.04,
-        )
-        virtual_obstacles["hurdle_edges"] = GreedyconcatEdgeCylinderCfg(
-            cylinder_radius=0.05,
             min_points=2,
             component_workers=0,
             merge_collinear_gap=0.09,

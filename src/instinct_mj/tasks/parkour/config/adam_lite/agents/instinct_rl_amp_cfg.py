@@ -343,9 +343,9 @@ class FootholdSquareGapsAmpAlgoCfg(FootholdAmpAlgoCfg):
 
 @dataclass(kw_only=True)
 class FootholdMixedAmpAlgoCfg(FootholdVelEstAmpAlgoCfg):
-    """Mixed = VelEst-Deep training algo + per-env slope r^f mask + gap gate=5."""
+    """Mixed = VelEst-Deep training algo + per-env slope r^f mask + terrain gate=3."""
 
-    terrain_level_gate: int = 5
+    terrain_level_gate: int = 3
     disable_foothold_guidance: bool = False
 
 
