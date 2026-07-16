@@ -118,6 +118,13 @@ Registered task IDs:
 - `Instinct-Perceptive-Vae-G1-Play-v0`
 - `Instinct-Parkour-Adam-SP-v0`
 - `Instinct-Parkour-Adam-SP-Play-v0`
+- `Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-v0`
+- `Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-Play-v0`
+- `Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0`
+- `Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0`
+
+Adam Lite foothold（DeepCNN / Mixed）说明见
+[`src/instinct_mj/tasks/parkour/config/adam_lite/README.md`](src/instinct_mj/tasks/parkour/config/adam_lite/README.md)。
 
 Use the CLI to inspect the full list at any time:
 
@@ -133,7 +140,13 @@ Train:
 ```bash
 instinct-train Instinct-Locomotion-Flat-G1-v0
 instinct-train Instinct-Parkour-Adam-SP-v0
+instinct-train Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-v0
+instinct-train Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0
 instinct-train Instinct-Perceptive-Shadowing-G1-v0
+
+# or via helper scripts
+./scripts/train_parkour_adam_lite_foothold_velest_deep.sh
+./scripts/train_parkour_adam_lite_foothold_mixed.sh
 ```
 
 Play (`--load-run` is required):
@@ -141,6 +154,8 @@ Play (`--load-run` is required):
 ```bash
 instinct-play Instinct-Locomotion-Flat-G1-Play-v0 --load-run <run_name>
 instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name>
+instinct-play Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-Play-v0 --load-run <run_name>
+instinct-play Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0 --load-run <run_name>
 instinct-play Instinct-Perceptive-Shadowing-G1-Play-v0 --load-run <run_name>
 ```
 

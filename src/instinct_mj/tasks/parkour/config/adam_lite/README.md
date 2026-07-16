@@ -1,109 +1,112 @@
-# Adam SP Parkour
+# Adam Lite Parkour
 
-基于 PND Adam SP（23 DOF）的 parkour 任务配置，在 `InstinctMJ` + `mjlab` 上运行。
+基于 PND Adam Lite 的 parkour / foothold 任务配置，在 `InstinctMJ` + `mjlab` 上运行。  
+当前主线是复现 [SSR](https://ssr-humanoid.github.io/) 的 imagined foothold guidance：去掉 CReF 分析式落脚 reward，落脚引导只由 SSR `r^f`（独立 foothold critic）提供，并保留 AMP 风格先验。
 
-## 任务 ID
+## 推荐任务（DeepCNN / Mixed）
 
-| 任务 ID | 用途 | 说明 |
-|--------|------|------|
-| `Instinct-Parkour-Adam-SP-v0` | 训练 | 带 AMP，深度视觉编码器，无 MoE |
-| `Instinct-Parkour-Adam-SP-Play-v0` | 回放 | 同上，用于查看/评测 |
+| 任务 ID | 用途 | 栈 | 地形 | 日志目录 |
+|--------|------|----|------|---------|
+| `Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-v0` | 训练 | DeepCNN + VelEst + SSR privileged critic + AMP | 楼梯（stairs-only） | `logs/instinct_rl/adam_lite_foothold_velest_deepcnn/` |
+| `Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-Play-v0` | 回放 | 同上 | 同上 | 同上 |
+| `Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0` | 训练 | 上表 DeepCNN/VelEst 栈 + **MoE×4 actor** | mixed 多地形 | `logs/instinct_rl/adam_lite_foothold_mixed/` |
+| `Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0` | 回放 | 同上 | 同上 | 同上 |
 
-后续可扩展：Target（无 AMP）、Target-Amp 等任务 ID（需在 `__init__.py` 中另行注册）。
+### VelEst-DeepCNN
+
+- **深度编码器**：SSR 对齐 CNN，`channels=[32,64,128]`，输入 `[10,36,36]`（10 帧堆叠 depth）→ 128-dim latent；仅挂在 actor。
+- **Critic**：SSR asymmetric，使用 privileged heightmap / limb state，**无** depth encoder。
+- **VelEst**：MLP 估计 `base_lin_vel`，注入 actor；监督目标来自 critic 侧真值。
+- **算法**：`FootholdWasabiEstimatorPPO`；advantage 混合 `(task, foothold, style)=(1.0, 0.25, 1.0)`。
+- **环境**：与 Foothold-VelEst 观测栈一致，仅 `run_name` / policy CNN 更深。
+
+配置入口：
+
+- Env：`adam_lite_foothold_parkour_cfg.instinct_adam_lite_foothold_deep_final_cfg`
+- Runner：`agents/instinct_rl_amp_cfg.adam_lite_foothold_velest_deep_amp_runner_cfg`
+
+### Foothold-Mixed
+
+在 VelEst-DeepCNN 训练栈上换 mixed 地形，并启用 **MoE×4 actor**（critic 仍为 SSR privileged MLP）。
+
+- **地形比例**（`FOOTHOLD_MIXED_TERRAINS_CFG`）：
+  - `one_sided_stairs` 0.45
+  - `continuous_box_gaps` 0.25
+  - `perlin_rough` / `perlin_rough_stand` / `continuous_slope` 各 0.10
+- **Virtual edges**：仅 stairs / box_gaps；slope 与 plane 不挂 edge cylinders。
+- **指令**：按子地形设置 `velocity_ranges`；`perlin_rough_stand` 为零前进速度、随机 yaw。
+- **终止**：`continuous_box_gaps` 上启用 `feet_on_pit_bottom`。
+- **算法**：`terrain_level_gate=3`；坡度等平滑地形由 per-env mask 关闭 `r^f`（与 SSR 一致）。
+
+配置入口：
+
+- Env：`adam_lite_foothold_mixed_parkour_cfg.instinct_adam_lite_foothold_mixed_final_cfg`
+- Runner：`agents/instinct_rl_amp_cfg.adam_lite_foothold_mixed_amp_runner_cfg`
+
+## 训练 / 回放脚本
+
+仓库根目录：
+
+```bash
+# DeepCNN（楼梯）
+./scripts/train_parkour_adam_lite_foothold_velest_deep.sh
+./scripts/train_parkour_adam_lite_foothold_velest_deep.sh --gpu 0 -n 4096
+./scripts/train_parkour_adam_lite_foothold_velest_deep.sh -n 2048 -b
+
+./scripts/play_parkour_adam_lite_foothold_velest_deep.sh \
+  --load_run logs/instinct_rl/adam_lite_foothold_velest_deepcnn/<run>/model_18000.pt
+
+# Mixed（多地形 + MoE）
+./scripts/train_parkour_adam_lite_foothold_mixed.sh
+./scripts/train_parkour_adam_lite_foothold_mixed.sh --gpu 0 -n 4096
+./scripts/train_parkour_adam_lite_foothold_mixed.sh -n 2048 -b
+
+./scripts/play_parkour_adam_lite_foothold_mixed.sh \
+  --load-run logs/instinct_rl/adam_lite_foothold_mixed/<run>
+```
+
+等价 CLI：
+
+```bash
+instinct-train Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-v0
+instinct-train Instinct-Parkour-Adam-Lite-Foothold-Mixed-v0
+
+instinct-play Instinct-Parkour-Adam-Lite-Foothold-VelEst-DeepCNN-Play-v0 --load-run <run>
+instinct-play Instinct-Parkour-Adam-Lite-Foothold-Mixed-Play-v0 --load-run <run> --viewer viser
+```
+
+常用参数：`--num-envs` / `-n`、`--gpu`、`--background` / `-b`、`--resume`、`--load-run`、`--checkpoint`。
+
+## 其他 foothold 变体（简表）
+
+| 任务 ID | 说明 |
+|--------|------|
+| `Instinct-Parkour-Adam-Lite-Foothold-v0` | 楼梯 + SSR foothold，浅层 depth CNN，无 VelEst |
+| `Instinct-Parkour-Adam-Lite-Foothold-VelEst-v0` | 上表 + MLP 速度估计（浅层 CNN） |
+| `Instinct-Parkour-Adam-Lite-Foothold-ContinuousSlope-v0` | 仅 continuous_slope；算法侧全局关闭 `r^f` |
+| `Instinct-Parkour-Adam-Lite-Foothold-SquareGaps-v0` | 仅 continuous_box_gaps；`terrain_level_gate=3` |
+
+另有非 foothold 的 parkour 任务（默认 / Three-Slopes / Hurdle / Bridge-L-Corner / Plum-Blossom / VelEst），见 `__init__.py` 注册列表。
 
 ## 配置结构
 
-- **`env_cfgs.py`**  
-  基础 flat 环境：`adam_sp_flat_parkour_env_cfg(play, has_state_estimation)`，供 parkour 任务配置在其上叠加地形、传感器、奖励等。
+- **`env_cfgs.py`** — flat 底座环境。
+- **`adam_lite_parkour_cfg.py`** — 默认 stairs parkour + AMP。
+- **`adam_lite_foothold_*.py`** — foothold / VelEst / DeepCNN / Mixed / 单地形变体。
+- **`agents/instinct_rl_amp_cfg.py`** — policy / algo / runner（含 DeepCNN、Mixed MoE）。
+- **`__init__.py`** — `register_instinct_task` 注册。
 
-- **`adam_sp_parkour_cfg.py`**  
-  Parkour 环境与 final 配置（带 AMP）：
-  - `instinct_adam_sp_parkour_env_cfg(play=False)`：地形、足端接触/射线、速度命令、AMP 观测、课程等。
-  - `instinct_adam_sp_parkour_final_cfg(play=False)`：在之上加 play 时的 viewer 等最终配置。
-  - AMP 相关：`AmassMotionCfg`、`motion_reference_cfg`。
+## AMP 数据集
 
-- **`agents/instinct_rl_ppo_cfg.py`**  
-  PPO 训练配置：`adam_parkour_ppo_runner_cfg()`，ActorCritic + PPO。
+运动数据默认在仓库内：
 
-- **`__init__.py`**  
-  将上述 env_cfg 与 AMP runner 注册为 `Instinct-Parkour-Adam-SP-v0` / `Instinct-Parkour-Adam-SP-Play-v0`。
-
-## AMP 配置
-
-本任务集成 AMP（Adversarial Motion Priors）。使用前需配置运动数据集路径：
-
-1. 在 `adam_sp_parkour_cfg.py` 中更新数据集路径：
-
-   ```python
-   _PARKOUR_DATASET_DIR = os.path.expanduser("~/Xyk/Datasets/data&model/parkour_motion_reference")
-   ```
-
-2. 如果过滤后的运动列表文件名不是 `parkour_motion_without_run.yaml`，也需要在 `AmassMotionCfg` 中更新 `filtered_motion_selection_filepath`。
-
-AMP 观测组：
-- `amp_policy`：机器人当前状态（projected_gravity、joint_pos_rel、joint_vel、base_lin_vel、base_ang_vel）
-- `amp_reference`：运动参考数据（同上，但从 motion_reference 传感器读取）
-
-## 训练
-
-```bash
-instinct-train Instinct-Parkour-Adam-SP-v0
-
-# 多卡
-instinct-train Instinct-Parkour-Adam-SP-v0 --gpu-ids "[0,1]"
+```python
+_PARKOUR_DATASET_DIR = os.path.expanduser("src/instinct_mj/motions")
 ```
 
-可选常用参数：`--num-envs`、`--video` 等，与项目其他任务一致。
-
-**脚本方式（可指定环境数量、后台运行）**：在仓库根目录执行
-
-```bash
-# 前台，默认环境数
-./scripts/train_parkour_adam_sp.sh
-
-# 指定环境数量（例如 4096）
-./scripts/train_parkour_adam_sp.sh -n 4096
-./scripts/train_parkour_adam_sp.sh --num-envs 2048
-
-# 后台运行，日志写入 logs/instinct_rl/
-./scripts/train_parkour_adam_sp.sh -n 4096 -b
-./scripts/train_parkour_adam_sp.sh --num-envs 8192 --background
-
-# 多卡：脚本里的 --gpu 接受 CUDA_VISIBLE_DEVICES 风格列表
-./scripts/train_parkour_adam_sp.sh --gpu 0,1 -n 2048
-```
-
-## 回放
-
-加载已训练 run 进行回放（`--load-run` 建议用绝对路径或明确 run 名）：
-
-```bash
-instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name> --viewer viser
-```
-
-随机策略可视化（不加载 checkpoint）：
-
-```bash
-instinct-play Instinct-Parkour-Adam-SP-Play-v0 --agent random
-```
-
-## 导出与 ONNX
-
-导出 ONNX：
-
-```bash
-instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name> --export-onnx True
-```
-
-使用已导出的 ONNX 推理回放：
-
-```bash
-instinct-play Instinct-Parkour-Adam-SP-Play-v0 --load-run <run_name> --use-onnx True
-```
+楼梯 foothold 使用 `motion_reference.yaml`。若路径或过滤列表不同，改对应 `adam_lite_*_parkour_cfg.py` 中的 `AmassMotionCfg`。
 
 ## 机器人说明
 
-- **模型**：Adam SP 23 DOF（`instinct_mj.assets.adam_sp`），腿 12 + 腰 3 + 臂 8，无手腕。
-- **足端**：`left_ankle_roll_link` / `right_ankle_roll_link` 用于接触与高度射线。
-
-更多环境与奖励细节见 `adam_sp_parkour_cfg.py` 内注释与参数。
+- **模型**：Adam Lite（`instinct_mj.assets`），足端 `left_ankle_roll_link` / `right_ankle_roll_link`。
+- 更多奖励与传感器细节见各 `*_cfg.py` 内注释。
