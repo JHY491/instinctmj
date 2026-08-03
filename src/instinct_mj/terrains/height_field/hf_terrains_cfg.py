@@ -461,6 +461,7 @@ _RAW_PERLIN_TILTED_RAMP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.p
 _RAW_PERLIN_SLOPE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_slope_terrain)
 _RAW_PERLIN_CROSS_STONE_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_cross_stone_terrain)
 _RAW_PERLIN_SQUARE_GAP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_square_gap_terrain)
+_RAW_PERLIN_DUAL_BOX_GAP_TERRAIN_FN = _unwrap_height_field_function(hf_terrains.perlin_dual_box_gap_terrain)
 
 
 @dataclass
@@ -770,3 +771,44 @@ class PerlinSquareGapTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
 
     def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
         return _RAW_PERLIN_SQUARE_GAP_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+@dataclass(kw_only=True)
+class PerlinDualBoxGapTerrainCfg(HfTerrainBaseCfg, WallTerrainCfgMixin):
+    """Rectangular raised bars with curriculum-scaled gaps (play-time generalization)."""
+
+    flat_patch_sampling: dict[str, FlatPatchSamplingCfg] | None = None
+
+    gap_distance_range: tuple[float, float] = (0.10, 0.30)
+    """Gap between consecutive bars in meters: ``min + difficulty * (max - min)``."""
+    box_length: float = 0.50
+    """Bar thickness along the gap/travel axis, meters."""
+    box_width: float = 2.5
+    """Bar extent orthogonal to the gap axis (the long side), meters."""
+    box_height: float | tuple[float, float] = 0.15
+    """Box height in meters. Tuple interpolates with difficulty."""
+    gap_depth: float = 0.0
+    """Optional recess below ground in the gap (meters). 0 keeps gap at ground level."""
+    gap_axis: Literal["x", "y"] = "x"
+    """``\"x\"``: bars separated along +x; ``\"y\"``: along +y."""
+    num_boxes: int | tuple[int, int] = 2
+    """Number of raised bars. Tuple interpolates with difficulty (e.g. ``(2, 5)``)."""
+    border_width: float = 0.0
+    perlin_cfg: PerlinPlaneTerrainCfg | None = None
+
+    def _generate_height_field(self, difficulty: float, cfg_for_gen: HfTerrainBaseCfg) -> np.ndarray:
+        return _RAW_PERLIN_DUAL_BOX_GAP_TERRAIN_FN(difficulty, cfg_for_gen)
+
+
+@dataclass(kw_only=True)
+class PerlinVerticalBoxGapTerrainCfg(PerlinDualBoxGapTerrainCfg):
+    """竖着的长条：长边沿 y，沿 +x 跨间隙。配合默认出生 (-4, 0)、朝向 +x。"""
+
+    gap_axis: Literal["x"] = "x"
+
+
+@dataclass(kw_only=True)
+class PerlinHorizontalBoxGapTerrainCfg(PerlinDualBoxGapTerrainCfg):
+    """横着的长条：长边沿 x，沿 y 跨间隙。"""
+
+    gap_axis: Literal["y"] = "y"

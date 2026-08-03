@@ -1,7 +1,9 @@
 from .hf_terrains_cfg import (
     PerlinCrossStoneTerrainCfg,
     PerlinDiscreteObstaclesTerrainCfg,
+    PerlinDualBoxGapTerrainCfg,
     PerlinGutterTerrainCfg,
+    PerlinHorizontalBoxGapTerrainCfg,
     PerlinInvertedPyramidSlopedTerrainCfg,
     PerlinInvertedPyramidStairsTerrainCfg,
     PerlinParapetTerrainCfg,
@@ -15,5 +17,6 @@ from .hf_terrains_cfg import (
     PerlinSteppingStonesTerrainCfg,
     PerlinTiltedRampTerrainCfg,
     PerlinTiltTerrainCfg,
+    PerlinVerticalBoxGapTerrainCfg,
     PerlinWaveTerrainCfg,
 )

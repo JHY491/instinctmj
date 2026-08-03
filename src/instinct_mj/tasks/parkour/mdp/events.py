@@ -71,7 +71,11 @@ def reset_root_state_on_target_patch(
     pose_range: dict[str, tuple[float, float]] | None = None,
     velocity_range: dict[str, tuple[float, float]] | None = None,
 ) -> None:
-    """Reset root pose/velocity by sampling terrain target flat patches."""
+    """Reset root pose/velocity by sampling terrain target flat patches.
+
+    Spawn xy comes from the robot ``init_state`` (default birth pose). Only z is
+    aligned to the sampled target patch.
+    """
     if env_ids.numel() == 0:
         return
 
@@ -90,8 +94,6 @@ def reset_root_state_on_target_patch(
 
     patch_ids = torch.randint(0, targets.shape[2], (len(env_ids),), device=env.device)
     target_pos_w = targets[terrain.terrain_levels[env_ids], terrain.terrain_types[env_ids], patch_ids]
-    # Keep regular spawn x/y, align z to target patch plus pelvis/root offset.
-    # The offset comes from robot default root z (driven by init_state.pos.z).
     base_pos_w[:, 2] = target_pos_w[:, 2] + default_root_state[:, 2]
 
     base_quat_w = default_root_state[:, 3:7].clone()

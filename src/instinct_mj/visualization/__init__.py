@@ -1,3 +1,6 @@
+from instinct_mj.visualization.foothold_imagination_debug import (
+    FootholdImaginationDebugVis as FootholdImaginationDebugVis,
+)
 from instinct_mj.visualization.marker_cfg import BLUE_ARROW_X_MARKER_CFG as BLUE_ARROW_X_MARKER_CFG
 from instinct_mj.visualization.marker_cfg import FRAME_MARKER_CFG as FRAME_MARKER_CFG
 from instinct_mj.visualization.marker_cfg import RED_ARROW_X_MARKER_CFG as RED_ARROW_X_MARKER_CFG

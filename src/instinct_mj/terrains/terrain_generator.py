@@ -152,8 +152,8 @@ class FiledTerrainGenerator(TerrainGenerator):
 
     def __init__(self, cfg: FiledTerrainGeneratorCfg, device: str = "cpu"):
 
-        # Access the i-th row, j-th column subterrain config by
-        # self._subterrain_specific_cfgs[i*num_cols + j]
+        # Curriculum generation appends col-outer/row-inner:
+        # idx = col * num_rows + row. (Legacy comment claimed row-major; that was wrong.)
         self._subterrain_specific_cfgs: list[SubTerrainBaseCfg] = []
         self._terrain_meshes: list[trimesh.Trimesh] = []
         self.terrain_mesh: trimesh.Trimesh | None = None
@@ -553,9 +553,13 @@ class FiledTerrainGenerator(TerrainGenerator):
     def get_subterrain_cfg(
         self, row_ids: int | torch.Tensor, col_ids: int | torch.Tensor
     ) -> list[SubTerrainBaseCfg] | SubTerrainBaseCfg | None:
-        """Get the specific configuration for a subterrain by its row and column index."""
-        num_cols = self.cfg.num_cols
-        idx = row_ids * num_cols + col_ids
+        """Get the specific configuration for a subterrain by its row and column index.
+
+        Indexing matches curriculum generation order (col outer, row inner):
+        ``idx = col * num_rows + row``.
+        """
+        num_rows = self.cfg.num_rows
+        idx = col_ids * num_rows + row_ids
         if isinstance(idx, torch.Tensor):
             idx = idx.cpu().numpy().tolist()  # Convert to list if it's a tensor.
             return [

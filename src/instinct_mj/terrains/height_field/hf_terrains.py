@@ -1582,3 +1582,97 @@ def perlin_square_gap_terrain(difficulty: float, cfg: hf_terrains_cfg.PerlinSqua
 
     # round off the heights to the nearest vertical step
     return np.rint(hf_raw).astype(np.int16)
+
+
+@generate_wall
+@height_field_to_mesh
+def perlin_dual_box_gap_terrain(
+    difficulty: float, cfg: hf_terrains_cfg.PerlinDualBoxGapTerrainCfg
+) -> np.ndarray:
+    """Raised rectangular bars with curriculum-scaled gaps between them.
+
+    ``gap_axis="x"`` (竖着): bars separated along +x.
+    ``gap_axis="y"`` (横着): bars separated along +y.
+    Gap width grows with ``difficulty`` from ``gap_distance_range[0]`` to ``[1]``.
+    ``num_boxes`` may be an int or ``(min, max)`` interpolated by difficulty.
+    """
+    gap_distance = cfg.gap_distance_range[0] + difficulty * (
+        cfg.gap_distance_range[1] - cfg.gap_distance_range[0]
+    )
+    if isinstance(cfg.box_height, (list, tuple)):
+        box_height = cfg.box_height[0] + difficulty * (cfg.box_height[1] - cfg.box_height[0])
+    else:
+        box_height = float(cfg.box_height)
+
+    num_boxes_cfg = getattr(cfg, "num_boxes", 2)
+    if isinstance(num_boxes_cfg, (list, tuple)):
+        num_boxes = int(
+            round(num_boxes_cfg[0] + difficulty * (num_boxes_cfg[1] - num_boxes_cfg[0]))
+        )
+    else:
+        num_boxes = int(num_boxes_cfg)
+    num_boxes = max(2, num_boxes)
+
+    width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
+    length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
+    box_length_px = max(1, round(cfg.box_length / cfg.horizontal_scale))
+    box_width_px = max(1, round(cfg.box_width / cfg.horizontal_scale))
+    gap_px = max(1, round(gap_distance / cfg.horizontal_scale))
+    box_height_i = round(box_height / cfg.vertical_scale)
+    gap_axis = getattr(cfg, "gap_axis", "x")
+
+    axis_pixels = width_pixels if gap_axis == "x" else length_pixels
+    ortho_pixels = length_pixels if gap_axis == "x" else width_pixels
+
+    total_span_px = num_boxes * box_length_px + (num_boxes - 1) * gap_px
+    if total_span_px >= axis_pixels:
+        # Shrink bar thickness first so N bars + gaps still fit.
+        overflow = total_span_px - (axis_pixels - 2)
+        shrink = max(0, (overflow + num_boxes - 1) // num_boxes)
+        box_length_px = max(1, box_length_px - shrink)
+        total_span_px = num_boxes * box_length_px + (num_boxes - 1) * gap_px
+        if total_span_px >= axis_pixels:
+            gap_px = max(1, (axis_pixels - 2 - num_boxes * box_length_px) // max(1, num_boxes - 1))
+            total_span_px = num_boxes * box_length_px + (num_boxes - 1) * gap_px
+
+    start = max(0, (axis_pixels - total_span_px) // 2)
+    o0 = max(0, (ortho_pixels - box_width_px) // 2)
+    o1 = min(ortho_pixels, o0 + box_width_px)
+
+    hf_raw = np.zeros((width_pixels, length_pixels), dtype=np.float64)
+    gap_value = -round(cfg.gap_depth / cfg.vertical_scale) if cfg.gap_depth > 0.0 else None
+
+    cursor = start
+    for i in range(num_boxes):
+        a0 = cursor
+        a1 = min(axis_pixels, a0 + box_length_px)
+        if gap_axis == "x":
+            hf_raw[a0:a1, o0:o1] = box_height_i
+        elif gap_axis == "y":
+            hf_raw[o0:o1, a0:a1] = box_height_i
+        else:
+            raise ValueError(f"Unknown gap_axis: {gap_axis!r}")
+        cursor = a1
+        if i < num_boxes - 1:
+            g0 = cursor
+            g1 = min(axis_pixels, g0 + gap_px)
+            if gap_value is not None:
+                if gap_axis == "x":
+                    hf_raw[g0:g1, o0:o1] = gap_value
+                else:
+                    hf_raw[o0:o1, g0:g1] = gap_value
+            cursor = g1
+
+    if cfg.perlin_cfg is not None:
+        perlin_cfg = cfg.perlin_cfg
+        perlin_cfg.size = cfg.size
+        perlin_cfg.horizontal_scale = cfg.horizontal_scale
+        perlin_cfg.vertical_scale = cfg.vertical_scale
+        perlin_cfg.slope_threshold = cfg.slope_threshold
+        perlin_noise = generate_perlin_noise(
+            difficulty,
+            perlin_cfg,  # type: ignore[arg-type]
+        )
+        hf_raw += perlin_noise
+
+    return np.rint(hf_raw).astype(np.int16)

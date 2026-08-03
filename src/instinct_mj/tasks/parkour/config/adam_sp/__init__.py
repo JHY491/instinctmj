@@ -8,7 +8,9 @@
 from instinct_mj.tasks.registry import register_instinct_task
 
 from .agents.instinct_rl_amp_cfg import adam_parkour_simple_amp_runner_cfg
+from .agents.instinct_rl_ssr_cfg import adam_parkour_ssr_runner_cfg
 from .adam_sp_parkour_simple_cfg import instinct_adam_sp_parkour_simple_final_cfg
+from .adam_sp_parkour_ssr_cfg import instinct_adam_sp_parkour_ssr_final_cfg
 
 
 register_instinct_task(
@@ -24,4 +26,20 @@ register_instinct_task(
     env_cfg_factory=lambda: instinct_adam_sp_parkour_simple_final_cfg(play=True),
     play_env_cfg_factory=lambda: instinct_adam_sp_parkour_simple_final_cfg(play=True),
     instinct_rl_cfg_factory=adam_parkour_simple_amp_runner_cfg,
+)
+
+
+register_instinct_task(
+    task_id="Instinct-Parkour-Stairs-Ssr-Adam-SP-v0",
+    env_cfg_factory=lambda: instinct_adam_sp_parkour_ssr_final_cfg(play=False),
+    play_env_cfg_factory=lambda: instinct_adam_sp_parkour_ssr_final_cfg(play=True),
+    instinct_rl_cfg_factory=adam_parkour_ssr_runner_cfg,
+)
+
+
+register_instinct_task(
+    task_id="Instinct-Parkour-Stairs-Ssr-Adam-SP-Play-v0",
+    env_cfg_factory=lambda: instinct_adam_sp_parkour_ssr_final_cfg(play=True),
+    play_env_cfg_factory=lambda: instinct_adam_sp_parkour_ssr_final_cfg(play=True),
+    instinct_rl_cfg_factory=adam_parkour_ssr_runner_cfg,
 )

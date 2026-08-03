@@ -50,6 +50,8 @@ class PlayConfig:
     onnx_model_dir: str | None = None
     no_resume: bool = False
     no_terminations: bool = False
+    foothold_vis: bool = True
+    """Draw imagined foothold mean and sole_grid patch (swing foot only) when the alg supports it."""
 
 
 class _ViewerEnvAdapter:
@@ -58,6 +60,8 @@ class _ViewerEnvAdapter:
     def __init__(self, vec_env: InstinctRlVecEnvWrapper):
         self._vec_env = vec_env
         self.num_envs = vec_env.num_envs
+        self._foothold_debug_vis = None
+        self._last_obs_pack = None
 
     @property
     def device(self):
@@ -71,15 +75,31 @@ class _ViewerEnvAdapter:
     def unwrapped(self):
         return self._vec_env.unwrapped
 
+    def _cache_obs_pack(self, extras: dict | None) -> None:
+        if not isinstance(extras, dict):
+            return
+        obs_pack = extras.get("observations")
+        self._last_obs_pack = obs_pack
+        if self._foothold_debug_vis is not None:
+            self._foothold_debug_vis.cache_obs_pack(obs_pack)
+
     def get_observations(self):
-        obs, _ = self._vec_env.get_observations()
+        obs, extras = self._vec_env.get_observations()
+        self._cache_obs_pack(extras)
         return obs
 
     def step(self, actions):
-        return self._vec_env.step(actions)
+        result = self._vec_env.step(actions)
+        # step -> (obs, rewards, dones, extras)
+        if isinstance(result, tuple) and len(result) >= 4:
+            self._cache_obs_pack(result[3])
+        return result
 
     def reset(self):
-        return self._vec_env.reset()
+        result = self._vec_env.reset()
+        if isinstance(result, tuple) and len(result) >= 2:
+            self._cache_obs_pack(result[1])
+        return result
 
     def close(self):
         return self._vec_env.close()
@@ -561,6 +581,20 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
             if runner is None:
                 raise RuntimeError("Runner is not initialized.")
             policy = runner.get_inference_policy(device=device)
+
+        if (
+            cfg.foothold_vis
+            and runner is not None
+            and hasattr(runner.alg, "compute_foothold_imagination_visualization")
+        ):
+            from instinct_mj.visualization.foothold_imagination_debug import FootholdImaginationDebugVis
+
+            foothold_vis = FootholdImaginationDebugVis(runner.alg, vec_env)
+            viewer_env._foothold_debug_vis = foothold_vis
+            viewer_env.unwrapped.manager_visualizers["foothold_imagination"] = foothold_vis
+            # Seed cache before first debug-vis frame.
+            viewer_env.get_observations()
+            print("[INFO] Foothold imagination debug visualization enabled (red mu + blue sole_grid, swing foot, all envs).")
 
     rollout_steps = _resolve_rollout_steps(cfg)
 
