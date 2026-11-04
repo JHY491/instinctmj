@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
+from mjlab.actuator import DelayedActuator
 from mjlab.managers import SceneEntityCfg
 from mjlab.managers.manager_base import ManagerTermBase
 from mjlab.sensor import ContactSensor, RayCastSensor
@@ -16,6 +17,14 @@ if TYPE_CHECKING:
     from mjlab.entity import Entity
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.viewer.debug_visualizer import DebugVisualizer
+
+
+def _unwrap_base_actuator(actuator):
+    # 原生 builtin actuator 自带 cfg/target_ids；DelayedActuator 把它们留在被包装层。
+    base_actuator = actuator
+    while isinstance(base_actuator, DelayedActuator):
+        base_actuator = base_actuator.base_actuator
+    return base_actuator
 
 
 def track_lin_vel_xy_exp(
@@ -723,7 +732,7 @@ def motors_power_square(
     if normalize_by_stiffness:
         # mjlab: stiffness is configured on each BuiltinPositionActuator cfg.
         for actuator in asset.actuators:
-            base_actuator = actuator.base_actuator
+            base_actuator = _unwrap_base_actuator(actuator)
             target_ids = base_actuator.target_ids
             stiffness = base_actuator.cfg.stiffness
             power_j[:, target_ids] /= torch.as_tensor(stiffness, device=power_j.device, dtype=power_j.dtype)
@@ -749,7 +758,7 @@ def joint_vel_limits(
 
     joint_vel_limits = torch.zeros_like(asset.data.joint_vel)
     for actuator in asset.actuators:
-        base_actuator = actuator.base_actuator
+        base_actuator = _unwrap_base_actuator(actuator)
         target_ids = base_actuator.target_ids
         joint_vel_limits[:, target_ids] = float(base_actuator.cfg.velocity_limit)
 
@@ -782,7 +791,7 @@ def applied_torque_limits_by_ratio(
     actuator_force = asset.data.actuator_force
     out_of_limits = []
     for actuator in asset.actuators:
-        base_actuator = actuator.base_actuator
+        base_actuator = _unwrap_base_actuator(actuator)
         target_names = list(base_actuator.target_names)
         ctrl_ids_local = base_actuator.ctrl_ids
         ctrl_ids_global = base_actuator.global_ctrl_ids

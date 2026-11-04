@@ -33,11 +33,14 @@ def attach_foothold_stack(
     cfg: ManagerBasedRlEnvCfg,
     *,
     drop_reward_names: tuple[str, ...] = ("cref_stair_foothold",),
+    hand_body_names: tuple[str, ...] = ("left_elbow_link", "right_elbow_link"),
 ) -> ManagerBasedRlEnvCfg:
     """挂 region scanner、foothold 观测组、SSR critic privileged、三组 reward。
 
     Critic 对齐 SSR Sec 3.1 / Table 12：proprio + v_t + v^f + c + p^h + p^f + H^b + H^f。
     不向 critic 喂 depth（depth 仅给 actor）。
+    hand_body_names 是 SSR p^h 的远端臂位置代理：Adam Lite 无 wrist，默认用肘端；
+    有完整腕链的机器人（如 G1）应传更靠近末端的 link。
     """
     cfg.observations["policy"].terms["depth_image"].params["num_output_frames"] = 10
     depth_params = cfg.observations["policy"].terms["depth_image"].params
@@ -66,8 +69,7 @@ def attach_foothold_stack(
         )
 
     ankle = SceneEntityCfg("robot", body_names=("left_ankle_roll_link", "right_ankle_roll_link"))
-    # Adam Lite 无 wrist；用肘端作为 SSR p^h 的远端臂位置代理。
-    elbow = SceneEntityCfg("robot", body_names=("left_elbow_link", "right_elbow_link"))
+    hand = SceneEntityCfg("robot", body_names=hand_body_names)
 
     region_scanners = (
         RayCastSensorCfg(
@@ -162,7 +164,7 @@ def attach_foothold_stack(
             ),
             "hand_pos_b": ObservationTermCfg(
                 func=parkour_mdp.link_pos_b_flat,
-                params={"asset_cfg": elbow},
+                params={"asset_cfg": hand},
             ),
             "foot_pos_b": ObservationTermCfg(
                 func=parkour_mdp.link_pos_b_flat,

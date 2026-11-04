@@ -136,6 +136,12 @@ class PoseVelocityCommand(CommandTerm):
         self.metrics["target_near_ratio"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["standing_env_ratio"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["random_velocity_env_ratio"] = torch.zeros(self.num_envs, device=self.device)
+        # Preserve the survival-weighted scores used by terrain curricula, but
+        # also report actual per-step means. A 2 s episode in a 20 s task must
+        # not make perfect tracking look like 0.1 or a ratio look like 10%.
+        for name in tuple(self.metrics):
+            self.metrics[f"mean_{name}"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["episode_steps"] = torch.zeros(self.num_envs, device=self.device)
 
         # obtain the terrain asset
         self.terrain: TerrainImporter = env.scene["terrain"]
@@ -602,38 +608,35 @@ class PoseVelocityCommand(CommandTerm):
             self._resample_velocity_internal([int(i) for i in env_ids.tolist()])
 
     def _update_metrics(self):
-        # logs data
         max_command_time = self.cfg.resampling_time_range[1]
         max_command_step = max_command_time / self._env.step_dt
-        # logs data
-        self.metrics["error_vel_xy"] += (
-            torch.norm(self.vel_command_b[:, :2] - self.robot.data.root_link_lin_vel_b[:, :2], dim=-1)
-            / max_command_step
-        )
-        self.metrics["error_vel_yaw"] += (
-            torch.abs(self.vel_command_b[:, 2] - self.robot.data.root_link_ang_vel_b[:, 2]) / max_command_step
-        )
+        error_xy = self.vel_command_b[:, :2] - self.robot.data.root_link_lin_vel_b[:, :2]
+        error_yaw = self.vel_command_b[:, 2] - self.robot.data.root_link_ang_vel_b[:, 2]
         lin_vel_error = torch.sum(
-            torch.square(self.vel_command_b[:, :2] - self.robot.data.root_link_lin_vel_b[:, :2]),
+            torch.square(error_xy),
             dim=1,
         )
-        self.metrics["tracking_exp_vel_xy"] += (
-            torch.exp(-lin_vel_error / self.cfg.lin_vel_metrics_std**2) / self._env.max_episode_length
-        )
-        angular_vel_error = torch.square(self.vel_command_b[:, 2] - self.robot.data.root_link_ang_vel_b[:, 2])
-        self.metrics["tracking_exp_vel_yaw"] += (
-            torch.exp(-angular_vel_error / self.cfg.ang_vel_metrics_std**2) / self._env.max_episode_length
-        )
+        angular_vel_error = torch.square(error_yaw)
         target_vec = self.pos_command_w - self.robot.data.root_link_pos_w[:, :3]
         target_dist = torch.norm(target_vec[:, :2], dim=1)
         cmd_lin_norm = torch.norm(self.vel_command_b[:, :2], dim=1)
         cmd_nonzero = torch.logical_or(cmd_lin_norm > 1e-6, torch.abs(self.vel_command_b[:, 2]) > 1e-6)
-        self.metrics["command_nonzero_ratio"] += cmd_nonzero.float() / self._env.max_episode_length
-        self.metrics["target_near_ratio"] += (
-            target_dist <= self.cfg.target_dis_threshold
-        ).float() / self._env.max_episode_length
-        self.metrics["standing_env_ratio"] += self.is_standing_env.float() / self._env.max_episode_length
-        self.metrics["random_velocity_env_ratio"] += self.random_velocity_indices.float() / self._env.max_episode_length
+        values = {
+            "error_vel_xy": torch.norm(error_xy, dim=-1),
+            "error_vel_yaw": torch.abs(error_yaw),
+            "tracking_exp_vel_xy": torch.exp(-lin_vel_error / self.cfg.lin_vel_metrics_std**2),
+            "tracking_exp_vel_yaw": torch.exp(-angular_vel_error / self.cfg.ang_vel_metrics_std**2),
+            "command_nonzero_ratio": cmd_nonzero.float(),
+            "target_near_ratio": (target_dist <= self.cfg.target_dis_threshold).float(),
+            "standing_env_ratio": self.is_standing_env.float(),
+            "random_velocity_env_ratio": self.random_velocity_indices.float(),
+        }
+        self.metrics["episode_steps"] += 1
+        for name, value in values.items():
+            normalizer = max_command_step if name.startswith("error_") else self._env.max_episode_length
+            self.metrics[name] += value / normalizer
+            mean = self.metrics[f"mean_{name}"]
+            mean += (value - mean) / self.metrics["episode_steps"]
 
     def _resample_command(self, env_ids: Sequence[int]):
         ids_t = torch.as_tensor(list(env_ids), device=self.device, dtype=torch.long)

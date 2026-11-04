@@ -52,6 +52,8 @@
       <geom size="0.07 0.028" pos="0.005 0 0.13" quat="0.707105 0.707108 0 0" type="capsule" rgba="0.7 0.7 0.7 1" />
       <geom size="0.065 0.02" pos="0.005 0 0.06" quat="0.707105 0.707108 0 0" type="capsule" rgba="0.7 0.7 0.7 1" />
       <geom size="0.068 0.005" pos="0.01 0 0.415" quat="-3.67321e-06 1 0 0" type="capsule" rgba="0.7 0.7 0.7 1" />
+      <!-- Parkour scanners: base heightmap cache grid hangs 0.5 m ahead of the root. -->
+      <site name="base_heightmap_scan" pos="0.5 0 0" size="0.01" />
       <body name="waist_roll_link">
         <inertial pos="0 2.3e-05 0" quat="0.5 0.5 -0.5 0.5" mass="0.086" diaginertia="8.245e-06 7.079e-06 6.339e-06" />
         <joint name="waist_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.52 0.52" actuatorfrcrange="-50 50" />
@@ -95,17 +97,19 @@
                         <inertial pos="0.026505 0 -0.016425" quat="-0.000481092 0.728482 -0.000618967 0.685065" mass="0.608" diaginertia="0.00167218 0.0016161 0.000217621" />
                         <joint name="left_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.2618 0.2618" actuatorfrcrange="-50 50" />
                         <geom type="mesh" mesh="left_ankle_roll_link" material="black" contype="0" conaffinity="0" density="0" group="2" />
-                        <geom size="0.01 0.025" pos="0.075 -0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.008 0.0835" pos="0.0395 -0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.091" pos="0.039 -0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.093" pos="0.039 0 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.091" pos="0.039 0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.008 0.0835" pos="0.0395 0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.025" pos="0.075 0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot1_collision" size="0.01 0.025" pos="0.075 -0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot2_collision" size="0.008 0.0835" pos="0.0395 -0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot3_collision" size="0.01 0.091" pos="0.039 -0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot4_collision" size="0.01 0.093" pos="0.039 0 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot5_collision" size="0.01 0.091" pos="0.039 0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot6_collision" size="0.008 0.0835" pos="0.0395 0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="left_foot7_collision" size="0.01 0.025" pos="0.075 0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
                         <body name="LL_FOOT" pos="0.04 0 -0.037">
                           <inertial pos="0 0 0" mass="1e-09" diaginertia="0 0 0" />
                         </body>
                         <site name="left_foot" pos="0.04 0 -0.037" size="0.01" rgba="1 0 0 1" />
+                        <!-- Parkour scanners: sole-centered ray grid at the foot center (Adam-Lite convention). -->
+                        <site name="left_foot_scan" pos="0.04 0 0" size="0.005" rgba="0 1 0 0.6" />
                       </body>
                     </body>
                   </body>
@@ -138,17 +142,19 @@
                         <inertial pos="0.026505 0 -0.016425" quat="0.000481092 0.728482 0.000618967 0.685065" mass="0.608" diaginertia="0.00167218 0.0016161 0.000217621" />
                         <joint name="right_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.2618 0.2618" actuatorfrcrange="-50 50" />
                         <geom type="mesh" mesh="right_ankle_roll_link" material="black" contype="0" conaffinity="0" density="0" group="2" />
-                        <geom size="0.01 0.025" pos="0.075 -0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.008 0.0835" pos="0.0395 -0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.091" pos="0.039 -0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.093" pos="0.039 0 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.091" pos="0.039 0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.008 0.0835" pos="0.0395 0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
-                        <geom size="0.01 0.025" pos="0.075 0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot1_collision" size="0.01 0.025" pos="0.075 -0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot2_collision" size="0.008 0.0835" pos="0.0395 -0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot3_collision" size="0.01 0.091" pos="0.039 -0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot4_collision" size="0.01 0.093" pos="0.039 0 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot5_collision" size="0.01 0.091" pos="0.039 0.01 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot6_collision" size="0.008 0.0835" pos="0.0395 0.018 -0.025" quat="0.707105 0 -0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
+                        <geom name="right_foot7_collision" size="0.01 0.025" pos="0.075 0.026 -0.025" quat="0.707105 0 0.707108 0" type="capsule" rgba="0.2 0.2 0.2 1" />
                         <body name="LR_FOOT" pos="0.04 0 -0.037">
                           <inertial pos="0 0 0" mass="1e-09" diaginertia="0 0 0" />
                         </body>
                         <site name="right_foot" pos="0.04 0 -0.037" size="0.01" rgba="1 0 0 0" />
+                        <!-- Parkour scanners: sole-centered ray grid at the foot center (Adam-Lite convention). -->
+                        <site name="right_foot_scan" pos="0.04 0 0" size="0.005" rgba="0 1 0 0.6" />
                       </body>
                     </body>
                   </body>

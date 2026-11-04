@@ -1,0 +1,6 @@
+# AMP motion list for Instinct-Parkour-G1-Plum-Blossom-Foothold-v0.
+# NOTE: walk_g1_retargeted.npz 由 scripts/convert_motion_studio_to_retargeted.py
+# 从 Unitree Motion Studio 导出（BG_Normal_Walking_00003，pelvis root 已换算到
+# torso_link freejoint）生成，29-DoF 与 g1_29dof_torsobase_popsicle.xml 匹配。
+selected_files:
+- walk_g1_retargeted.npz

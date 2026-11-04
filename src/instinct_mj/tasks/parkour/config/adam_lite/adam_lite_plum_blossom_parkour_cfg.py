@@ -325,9 +325,12 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
                 lin_vel_y=(0.0, 0.0),
                 ang_vel_z=(-1.0, 1.0),
             ),
-            random_velocity_terrain=[],
+            random_velocity_terrain=["perlin_rough_stand"],
             velocity_ranges={
                 "plum_blossom_stakes": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
+                # rough 过渡列：普通行走速度域；rough_stand 站立/原地转向（楼梯任务同款）。
+                "perlin_rough": {"lin_vel_x": (0.3, 1.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-0.5, 0.5)},
+                "perlin_rough_stand": {"lin_vel_x": (0.0, 0.0), "lin_vel_y": (0.0, 0.0), "ang_vel_z": (-1.0, 1.0)},
             },
             only_positive_lin_vel_x=True,
             lin_vel_threshold=0.0,
@@ -733,9 +736,6 @@ def instinct_adam_lite_plum_blossom_parkour_env_cfg(
                 ),
                 "cmd_threshold": 0.0,
                 "angle_scale": 0.05,
-                # In-place yaw turns have zero linear command; keep feet aligned to base
-                # forward so the robot steps to turn instead of splaying hip-yaw to pivot.
-                "yaw_cmd_threshold": 0.10,
             },
         ),
         "feet_at_plane": RewardTermCfg(

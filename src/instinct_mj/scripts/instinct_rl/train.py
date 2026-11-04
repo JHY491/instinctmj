@@ -32,6 +32,22 @@ from instinct_mj.tasks.registry import list_tasks, load_env_cfg, load_instinct_r
 from instinct_mj.utils.motion_validation import validate_tracking_motion_file
 
 
+def _quiet_mujoco_hfield_overflow() -> None:
+    """静音 hfield 碰撞溢出警告。
+
+    梅花桩任务初期踩空没入桩孔时每步 ~17 条（stderr 无缓冲），39h 训练
+    累计约 275MB 日志。物理上接触截断仍稳定，触发者多为即将被
+    feet_on_pit_bottom termination 的 env，可安全忽略。
+    """
+    import mujoco
+
+    def _on_warning(msg: str) -> None:
+        if "height field collision overflow" not in msg:
+            print(f"WARNING: {msg}")  # 其余 MuJoCo 警告保持可见
+
+    mujoco.set_mju_user_warning(_on_warning)
+
+
 def _to_yaml_data(data: Any) -> Any:
     if is_dataclass(data):
         return {item.name: _to_yaml_data(getattr(data, item.name)) for item in fields(data)}
@@ -411,6 +427,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     log_dir = log_dir.expanduser().resolve()
     world_size_threads = int(os.environ.get("WORLD_SIZE", "1"))
     _configure_cpu_thread_env(world_size=world_size_threads)
+    _quiet_mujoco_hfield_overflow()
 
     if InstinctRlVecEnvWrapper is None:
         raise ImportError(

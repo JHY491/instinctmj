@@ -986,15 +986,18 @@ PLUM_BLOSSOM_TERRAINS_CFG = FiledTerrainGeneratorCfg(
     size=(8.0, 8.0),
     border_width=5.0,
     num_rows=10,
-    num_cols=1,
+    # 比例靠列分派生效：8 列梅花桩 + 2 列 rough 过渡（楼梯/缝隙任务同款模式）。
+    # cols=1 时唯一一列只会归 dict 首位地形，比例不生效。
+    num_cols=10,
     horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=1.0,
     curriculum=True,
     add_lights=True,
     sub_terrains={
+        # 首位保证 play 版（cols=1）唯一一列仍是梅花桩。
         "plum_blossom_stakes": PerlinPlumBlossomStakesTerrainCfg(
-            proportion=1.0,
+            proportion=0.8,
             stake_width_range=(0.3, 0.5),
             stake_distance_range=(0.10, 0.35),
             stake_height=0.0,
@@ -1026,6 +1029,52 @@ PLUM_BLOSSOM_TERRAINS_CFG = FiledTerrainGeneratorCfg(
                     fixed_xy_points=((3.7, 0.0),),
                     fixed_y_offset_range=(-0.4, 0.4),
                     reset_command_patch_index=0,
+                ),
+            },
+        ),
+        # rough 过渡地形：噪声幅度也随课程行插值，低行近平地、高行 ±0.1 m。
+        # target patch 取对端 (3.7, 0)，与梅花桩列"从一端走到另一端"一致。
+        "perlin_rough": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
+                ),
+            },
+        ),
+        "perlin_rough_stand": PerlinPlaneTerrainCfg(
+            proportion=0.1,
+            noise_scale=[0.0, 0.1],
+            noise_frequency=20,
+            fractal_octaves=2,
+            fractal_lacunarity=2.0,
+            fractal_gain=0.25,
+            centering=True,
+            border_width=1.0,
+            wall_prob=[0.0, 0.0, 0.0, 0.0],
+            wall_height=0.0,
+            wall_thickness=0.05,
+            flat_patch_sampling={
+                "target": FlatPatchSamplingCfg(
+                    num_patches=50,
+                    patch_radius=[0.05, 0.10, 0.15, 0.20],
+                    max_height_diff=0.05,
+                    x_range=(3.7, 3.7),
+                    y_range=(0.0, 0.0),
                 ),
             },
         ),
