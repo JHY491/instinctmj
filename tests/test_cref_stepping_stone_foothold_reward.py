@@ -131,7 +131,7 @@ def _make_stakes_env(
     )
 
 
-def _make_term(env: SimpleNamespace) -> cref_stepping_stone_foothold_reward:
+def _make_term(env: SimpleNamespace, **params) -> cref_stepping_stone_foothold_reward:
     return cref_stepping_stone_foothold_reward(
         RewardTermCfg(
             func=cref_stepping_stone_foothold_reward,
@@ -144,6 +144,7 @@ def _make_term(env: SimpleNamespace) -> cref_stepping_stone_foothold_reward:
                 ),
                 "contact_force_threshold": 1.0,
                 "s_xy": 0.15,
+                **params,
             },
         ),
         env,
@@ -407,3 +408,34 @@ def test_reset_avoids_initial_touchdown_reward() -> None:
     term = _make_term(env)
     term.reset()
     assert term(env).item() == 0.0
+
+
+def test_touchdown_requires_sole_support_at_stake_height_when_configured() -> None:
+    start_x, start_y, _ = _stakes_centers()[0]
+    for sole_z, scan_z, ray_hits, expected in (
+        (0.0, 0.0, 3, 1.0),
+        (-0.25, -0.25, 3, 0.0),
+        (-0.25, 0.0, 3, 0.0),
+        (0.0, 0.0, 1, 0.0),
+    ):
+        env = _make_stakes_env(in_contact=True, foot_x=start_x, foot_y=start_y)
+        data = SimpleNamespace(
+            hit_pos_w=torch.full((1, 3, 3), scan_z),
+            distances=torch.tensor([[1.0 if i < ray_hits else -1.0 for i in range(3)]]),
+        )
+        env.scene.sensors["left_scan"] = SimpleNamespace(data=data)
+        env.scene.sensors["right_scan"] = SimpleNamespace(data=data)
+        term = _make_term(env, sole_scanner_names=("left_scan", "right_scan"), foot_height_offset=0.0)
+        term.reset()
+
+        force_history = env.scene["contact_forces"].data.force_history
+        force_history[:, 0].zero_()
+        assert term(env).item() == 0.0
+        foot = env.scene["robot"].data.body_link_pos_w[:, 0]
+        foot[:, :2] = term.frozen_candidates_xy[:, 0, 0]
+        foot[:, 2] = sole_z
+        force_history[:, 0].fill_(5.0)
+
+        assert term(env).item() == expected
+        assert not term.foot_armed[0, 0]
+        assert term(env).item() == 0.0

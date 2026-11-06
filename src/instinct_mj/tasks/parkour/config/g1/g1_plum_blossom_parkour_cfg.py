@@ -34,6 +34,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 
 import instinct_mj.envs.mdp as instinct_envs_mdp
 import instinct_mj.tasks.parkour.mdp as parkour_mdp
+from instinct_mj.tasks.locomotion.mdp.rewards import lin_vel_z_l2
 from instinct_mj.assets.unitree_g1 import (
     G1_29Dof_TorsoBase_symmetric_augmentation_joint_mapping,
     G1_29Dof_TorsoBase_symmetric_augmentation_joint_reverse_buf,
@@ -607,6 +608,12 @@ def instinct_g1_plum_blossom_parkour_env_cfg(
                 "vel_threshold": 0.1,
             },
         ),
+        "both_feet_air_time": RewardTermCfg(
+            func=parkour_mdp.both_feet_air_time,
+            weight=-0.5,
+            params={"sensor_name": "contact_forces", "grace_period": 0.06},
+        ),
+        "lin_vel_z_l2": RewardTermCfg(func=lin_vel_z_l2, weight=-0.15),
         "cref_stepping_stone_foothold": RewardTermCfg(
             func=parkour_mdp.cref_stepping_stone_foothold_reward,
             weight=1.5,
@@ -658,6 +665,11 @@ def instinct_g1_plum_blossom_parkour_env_cfg(
             },
         ),
         "ang_vel_xy_l2": RewardTermCfg(func=parkour_mdp.ang_vel_xy_l2, weight=-0.05),
+        "pelvis_roll_rate_excess_l2": RewardTermCfg(
+            func=parkour_mdp.link_roll_rate_excess_l2,
+            weight=-0.15,
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=("pelvis",)), "tolerance": 1.0},
+        ),
         "dof_torques_l2": RewardTermCfg(
             func=parkour_mdp.joint_torques_l2,
             weight=-1.5e-7,

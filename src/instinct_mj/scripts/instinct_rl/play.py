@@ -594,6 +594,38 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
             policy = runner.get_inference_policy(device=device)
             policy = _wrap_foothold_imagination_visualization(policy, runner, vec_env)
 
+        # --- debug: 每隔 N 个 policy 步在命令行打印 base_velocity 指令 ---
+        # 先绑定原 policy：闭包晚绑定下直接引用 policy 会指向包装函数自身（无限递归）。
+        _inner_policy = policy
+        _print_step = 0
+        _PRINT_EVERY = 50  # 约 1 秒打印一次，嫌吵可调大
+
+        def _policy_with_command_log(obs):
+            nonlocal _print_step
+            actions = _inner_policy(obs)
+            if _print_step % _PRINT_EVERY == 0:
+                cmd_term = env.command_manager.get_term("base_velocity")
+                vel_b = cmd_term.command[0].cpu().numpy()           # (vx, vy, yaw_rate): m/s, m/s, rad/s
+                target_w = cmd_term.pos_command_w[0].cpu().numpy()  # 目标点世界坐标
+                root_w = cmd_term.robot.data.root_link_pos_w[0].cpu().numpy()
+                actual_vel_b = cmd_term.robot.data.root_link_lin_vel_b[0].cpu().numpy()
+                standing = bool(cmd_term.is_standing_env[0].item())
+                reached = bool(cmd_term._target_reached[0].item())
+                cmd_left_s = float(cmd_term.time_left[0].item())
+                act = actions.detach().cpu().numpy()
+                print(
+                    f"[cmd] step {_print_step}: vel_b={vel_b}, "
+                    f"target_w={target_w}, root_w={root_w}, "
+                    f"standing={standing}, target_reached={reached}, cmd_left_s={cmd_left_s:.2f}, "
+                    f"actual_vel_b={actual_vel_b}, "
+                    f"act[min,max,mean|.|]={act.min():.3f},{act.max():.3f},{abs(act).mean():.3f}",
+                    flush=True,
+                )
+            _print_step += 1
+            return actions
+
+        policy = _policy_with_command_log
+
     rollout_steps = _resolve_rollout_steps(cfg)
 
     if viewer_backend == "native":

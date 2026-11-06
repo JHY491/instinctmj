@@ -28,14 +28,13 @@ def _base_lin_vel_est_term() -> ObservationTermCfg:
     )
 
 
-def instinct_g1_plum_blossom_foothold_env_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
+def instinct_g1_plum_blossom_foothold_env_cfg(*, play: bool = False, use_cref: bool = False) -> ManagerBasedRlEnvCfg:
     """梅花桩 env + foothold 传感器/观测组。"""
     cfg = instinct_g1_plum_blossom_parkour_env_cfg(play=play)
     setattr(cfg, "run_name", "G1PlumBlossomFoothold")
     cfg = attach_foothold_stack(
         cfg,
-        # 梅花桩落点由 SSR r^f 接管，弃用解析 CReF 落点奖励（同 Adam 楼梯的做法）。
-        drop_reward_names=("cref_stepping_stone_foothold",),
+        drop_reward_names=() if use_cref else ("cref_stepping_stone_foothold",),
         # G1 有完整腕链；SSR p^h 用腕末端而非肘（Adam Lite 无 wrist 才用肘端）。
         hand_body_names=("left_wrist_yaw_link", "right_wrist_yaw_link"),
     )
@@ -44,10 +43,24 @@ def instinct_g1_plum_blossom_foothold_env_cfg(*, play: bool = False) -> ManagerB
     # terrain cache share an origin. Their world z already is the sole plane;
     # the shared Adam default (ankle z - 6.5 cm) is invalid for G1.
     sole = SceneEntityCfg("robot", body_names=("LL_FOOT", "LR_FOOT"))
-    foothold_terms = cfg.observations["foothold"].terms
-    for name in ("foot_pos_b", "foot_pos_w", "foot_vel_b", "foot_sole_z"):
-        foothold_terms[name].params["asset_cfg"] = sole
-    foothold_terms["foot_sole_z"].params["foot_height_offset"] = 0.0
+    if use_cref:
+        reward_name = "cref_stepping_stone_foothold"
+        cref = cfg.rewards["task"].pop(reward_name)
+        # Preserve the original task-channel scale under the foothold advantage weight (0.25).
+        cref.weight = 6.0
+        cref.params.update(
+            asset_cfg=sole,
+            foot_height_offset=0.0,
+            sole_scanner_names=("left_foot_sole_scanner", "right_foot_sole_scanner"),
+        )
+        cfg.rewards["foothold"] = {reward_name: cref}
+        cfg.observations.pop("foothold")
+        cfg.scene.sensors = tuple(sensor for sensor in cfg.scene.sensors if not sensor.name.endswith("_region_scanner"))
+    else:
+        foothold_terms = cfg.observations["foothold"].terms
+        for name in ("foot_pos_b", "foot_pos_w", "foot_vel_b", "foot_sole_z"):
+            foothold_terms[name].params["asset_cfg"] = sole
+        foothold_terms["foot_sole_z"].params["foot_height_offset"] = 0.0
     # HIMLoco 式速度估计槽（同 Adam foothold-velest）：
     # - policy 侧该槽在 act() 时被 EncoderVelActorCritic 用 MLP 估计值覆盖（真值不泄漏给策略）；
     # - critic 侧保留真值，作为 estimator_loss 的监督 target（target_from_critic=True）。
@@ -56,8 +69,8 @@ def instinct_g1_plum_blossom_foothold_env_cfg(*, play: bool = False) -> ManagerB
     return cfg
 
 
-def instinct_g1_plum_blossom_foothold_final_cfg(*, play: bool = False) -> ManagerBasedRlEnvCfg:
-    cfg = instinct_g1_plum_blossom_foothold_env_cfg(play=play)
+def instinct_g1_plum_blossom_foothold_final_cfg(*, play: bool = False, use_cref: bool = False) -> ManagerBasedRlEnvCfg:
+    cfg = instinct_g1_plum_blossom_foothold_env_cfg(play=play, use_cref=use_cref)
     if play:
         # 父级 play 会把 num_rows 缩到 4（难度只有 row 0-3）；恢复课程全 10 行，
         # 才能在 play 里评测后期梅花桩难度（stake 收窄到 0.3m、孔深 -0.3m）。

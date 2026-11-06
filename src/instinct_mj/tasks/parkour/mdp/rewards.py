@@ -380,14 +380,19 @@ def yaw_cmd_double_support(
 def both_feet_air_time(
     env: ManagerBasedRlEnv,
     sensor_name: str,
+    grace_period: float = 0.0,
 ) -> torch.Tensor:
-    """Penalize two-foot flight to discourage hopping during in-place spins."""
+    """Penalize two-foot flight once both feet have been airborne past the grace period."""
     contact_sensor: ContactSensor = env.scene[sensor_name]
     contact_time = contact_sensor.data.current_contact_time
     assert contact_time is not None
 
     in_contact = contact_time > 0.0
     both_feet_air = torch.sum(in_contact.int(), dim=1) == 0
+    if grace_period > 0.0:
+        air_time = contact_sensor.data.current_air_time
+        assert air_time is not None
+        both_feet_air &= air_time.amin(dim=1) > grace_period
     return both_feet_air.float()
 
 
@@ -428,6 +433,19 @@ def ang_vel_xy_l2(
 ) -> torch.Tensor:
     asset: Entity = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.root_link_ang_vel_b[:, :2]), dim=1)
+
+
+def link_roll_rate_excess_l2(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg,
+    tolerance: float,
+) -> torch.Tensor:
+    """Penalize link-local roll rate beyond the tolerance in radians per second."""
+    data = env.scene[asset_cfg.name].data
+    quat_w = data.body_link_quat_w[:, asset_cfg.body_ids]
+    ang_vel_w = data.body_link_ang_vel_w[:, asset_cfg.body_ids]
+    roll_rate = quat_apply_inverse(quat_w, ang_vel_w)[..., 0]
+    return (roll_rate.abs() - tolerance).clamp_min(0.0).square().sum(dim=1)
 
 
 def joint_deviation_square(
@@ -1373,6 +1391,7 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
     Per foot: on liftoff refresh and freeze stake candidates; on touchdown reward once with
     ``exp(-d_xy / s_xy)`` where ``d_xy`` is the minimum distance to the frozen set in the
     terrain-local horizontal plane. Inactive on non-stake terrains.
+    When sole scanners are configured, require support near stake-top height.
     """
 
     _STAKES_TERRAIN_NAME = "plum_blossom_stakes"
@@ -1389,6 +1408,8 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         self.min_forward_margin = float(cfg.params.get("min_forward_margin", 0.02))
         self.max_candidates_per_foot = int(cfg.params.get("max_candidates_per_foot", 2))
         self.foot_height_offset = float(cfg.params.get("foot_height_offset", 0.065))
+        self.sole_scanner_names = cfg.params.get("sole_scanner_names")
+        self.min_sole_support_fraction = float(cfg.params.get("min_sole_support_fraction", 0.6))
 
         asset: Entity = env.scene[self.asset_cfg.name]
         if isinstance(self.asset_cfg.body_ids, slice):
@@ -1396,6 +1417,8 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         else:
             self.body_ids = list(self.asset_cfg.body_ids)
         self.num_feet = len(self.body_ids)
+        if self.sole_scanner_names is not None and len(self.sole_scanner_names) != self.num_feet:
+            raise ValueError("CReF requires one sole scanner per foot, in foot order.")
 
         self._enabled = False
         terrain = env.scene.terrain
@@ -1571,6 +1594,20 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         cols = terrain.terrain_types
         return self.stakes_col_mask[cols]
 
+    def _has_stake_top_support(
+        self, env: ManagerBasedRlEnv, foot_z: torch.Tensor, stake_top_z: torch.Tensor
+    ) -> torch.Tensor:
+        assert self.sole_scanner_names is not None
+        sole_z = foot_z - self.foot_height_offset
+        near_top = (sole_z - stake_top_z).abs() <= 0.04
+        support = []
+        for name in self.sole_scanner_names:
+            data = env.scene[name].data
+            on_top = (data.hit_pos_w[..., 2] - stake_top_z).abs() <= 0.02
+            fraction = (on_top & (data.distances >= 0.0)).float().mean(dim=-1)
+            support.append(fraction >= self.min_sole_support_fraction)
+        return near_top & torch.stack(support, dim=-1)
+
     def _refresh_frozen_candidates(
         self,
         env_ids: torch.Tensor,
@@ -1620,6 +1657,8 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
         min_forward_margin: float = 0.02,
         max_candidates_per_foot: int = 2,
         foot_height_offset: float = 0.065,
+        sole_scanner_names: tuple[str, ...] | None = None,
+        min_sole_support_fraction: float = 0.6,
     ) -> torch.Tensor:
         del (
             asset_cfg,
@@ -1629,6 +1668,8 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
             min_forward_margin,
             max_candidates_per_foot,
             foot_height_offset,
+            sole_scanner_names,
+            min_sole_support_fraction,
         )
         if not self._enabled:
             return torch.zeros(env.num_envs, device=env.device)
@@ -1667,7 +1708,12 @@ class cref_stepping_stone_foothold_reward(ManagerTermBase):
             self.frozen_candidates_xy,
             self.frozen_candidate_counts,
         )
-        foot_reward = torch.exp(-min_dist / self.s_xy) * touchdown.float()
+        rewarded_touchdown = touchdown
+        if self.sole_scanner_names is not None:
+            # Stake tops share one height within a terrain tile.
+            stake_top_z = (origins[:, 2] + self.stake_z_local[levels, cols, 0]).unsqueeze(-1)
+            rewarded_touchdown = touchdown & self._has_stake_top_support(env, foot_pos_w[..., 2], stake_top_z)
+        foot_reward = torch.exp(-min_dist / self.s_xy) * rewarded_touchdown.float()
         reward = torch.sum(foot_reward, dim=1) * stakes_active.float()
 
         self.foot_armed = torch.where(touchdown, torch.zeros_like(self.foot_armed), self.foot_armed)
